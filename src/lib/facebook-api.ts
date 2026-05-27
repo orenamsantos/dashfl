@@ -7,6 +7,7 @@ export interface FBInsight {
   impressions: number;
   clicks: number;
   reach?: number;
+  frequency?: number;
   cpm?: number;
   cpc?: number;
   ctr?: number;
@@ -16,7 +17,16 @@ export interface FBCampaign {
   id: string;
   name: string;
   status: "ACTIVE" | "PAUSED" | "DELETED" | "ARCHIVED";
+  // orçamentos do Meta vêm em UNIDADE MÍNIMA da moeda da conta (centavos)
+  daily_budget?: number | null;
+  lifetime_budget?: number | null;
   insights: FBInsight;
+}
+
+export interface FBAdLite {
+  id: string;
+  campaign_id: string;
+  adset_id: string;
 }
 
 export interface FBAdSet {
@@ -101,4 +111,10 @@ export async function fetchAds(
   preset: DatePreset = "last_7d",
 ): Promise<FBAd[]> {
   return fb({ resource: "ads", id: adsetId, preset });
+}
+
+// Lista enxuta de todos os anúncios da conta (id, campaign_id, adset_id).
+// Usada pra mapear utm_term=ad.id → campanha quando agregando vendas.
+export async function fetchAllAds(): Promise<FBAdLite[]> {
+  return fb({ resource: "all_ads" });
 }

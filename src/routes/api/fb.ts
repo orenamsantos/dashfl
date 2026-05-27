@@ -6,7 +6,8 @@ import { createFileRoute } from "@tanstack/react-router";
 // receives only processed data (spend, impressions, campaigns, ...).
 
 const API = "https://graph.facebook.com/v24.0";
-const INSIGHTS_FIELDS = "spend,impressions,clicks,reach,cpm,cpc,ctr";
+const INSIGHTS_FIELDS =
+  "spend,impressions,clicks,reach,frequency,cpm,cpc,ctr";
 
 function getCreds() {
   const token = process.env.FACEBOOK_TOKEN;
@@ -41,6 +42,7 @@ function parseInsights(arr: any[] | undefined) {
       impressions: 0,
       clicks: 0,
       reach: 0,
+      frequency: 0,
       cpm: 0,
       cpc: 0,
       ctr: 0,
@@ -50,6 +52,7 @@ function parseInsights(arr: any[] | undefined) {
     impressions: Number(i.impressions ?? 0),
     clicks: Number(i.clicks ?? 0),
     reach: Number(i.reach ?? 0),
+    frequency: Number(i.frequency ?? 0),
     cpm: Number(i.cpm ?? 0),
     cpc: Number(i.cpc ?? 0),
     ctr: Number(i.ctr ?? 0),
@@ -60,6 +63,34 @@ function emptyFor(resource: string): unknown {
   if (resource === "account_insights")
     return { spend: 0, impressions: 0, clicks: 0, cpc: 0, cpm: 0, ctr: 0 };
   return [];
+}
+
+// Pagina cursores do Graph até `maxPages` (ou até esgotar). Usado pelo
+// `all_ads` que pode trazer milhares de anúncios — limitamos pra não estourar
+// o tempo do worker.
+async function graphPaged(
+  path: string,
+  token: string,
+  maxPages: number,
+): Promise<any[]> {
+  const all: any[] = [];
+  let next: string | null = null;
+  for (let i = 0; i < maxPages; i++) {
+    let url: string;
+    if (next) {
+      url = next;
+    } else {
+      const sep = path.includes("?") ? "&" : "?";
+      url = `${API}${path}${sep}access_token=${encodeURIComponent(token)}`;
+    }
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json?.error) throw new Error(json.error.message ?? "Graph API error");
+    if (Array.isArray(json.data)) all.push(...json.data);
+    next = json?.paging?.next ?? null;
+    if (!next) break;
+  }
+  return all;
 }
 
 export const Route = createFileRoute("/api/fb")({
@@ -117,7 +148,7 @@ export const Route = createFileRoute("/api/fb")({
               );
             }
             case "campaigns": {
-              const fields = `id,name,status,insights.date_preset(${preset}){${INSIGHTS_FIELDS}}`;
+              const fields = `id,name,status,daily_budget,lifetime_budget,insights.date_preset(${preset}){${INSIGHTS_FIELDS},reach,frequency}`;
               const j = await graph(
                 `/${accountId}/campaigns?fields=${fields}&limit=200`,
                 token,
@@ -127,7 +158,28 @@ export const Route = createFileRoute("/api/fb")({
                   id: c.id,
                   name: c.name,
                   status: c.status,
+                  // orçamentos vêm em UNIDADE MÍNIMA da moeda da conta (centavos)
+                  daily_budget: c.daily_budget != null ? Number(c.daily_budget) : null,
+                  lifetime_budget:
+                    c.lifetime_budget != null ? Number(c.lifetime_budget) : null,
                   insights: parseInsights(c.insights?.data),
+                })),
+              );
+            }
+            case "all_ads": {
+              // Lista enxuta de TODOS os anúncios da conta (id + campaign_id)
+              // pra montar o índice ad.id → campaign_id e cruzar com vendas
+              // que vêm com utm_term=ad.id. Sem insights pra ficar barato.
+              const data = await graphPaged(
+                `/${accountId}/ads?fields=id,campaign_id,adset_id&limit=500`,
+                token,
+                10,
+              );
+              return jsonResponse(
+                data.map((a: any) => ({
+                  id: a.id,
+                  campaign_id: a.campaign_id,
+                  adset_id: a.adset_id,
                 })),
               );
             }
