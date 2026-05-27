@@ -48,6 +48,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { CheckoutHealthSection } from "@/components/checkout-health-section";
+
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — AdsTracker" }] }),
   component: DashboardPage,
@@ -530,6 +532,7 @@ function DashboardPage() {
             </CardContent>
           </Card>
 
+          <CheckoutHealthSection rows={sales.data?.rows ?? []} />
         </>
       )}
     </div>
