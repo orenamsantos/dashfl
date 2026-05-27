@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ApiFbRouteImport } from './routes/api/fb'
 import { Route as ApiBudgetRouteImport } from './routes/api/budget'
+import { Route as ApiFeesRouteImport } from './routes/api/fees'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
 import { Route as AppIntegrationsRouteImport } from './routes/_app.integrations'
@@ -47,6 +48,11 @@ const ApiFbRoute = ApiFbRouteImport.update({
 const ApiBudgetRoute = ApiBudgetRouteImport.update({
   id: '/api/budget',
   path: '/api/budget',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFeesRoute = ApiFeesRouteImport.update({
+  id: '/api/fees',
+  path: '/api/fees',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
   '/api/budget': typeof ApiBudgetRoute
+  '/api/fees': typeof ApiFeesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
   '/api/budget': typeof ApiBudgetRoute
+  '/api/fees': typeof ApiFeesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
   '/api/budget': typeof ApiBudgetRoute
+  '/api/fees': typeof ApiFeesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -163,6 +172,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/fb'
     | '/api/budget'
+    | '/api/fees'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -179,6 +189,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/fb'
     | '/api/budget'
+    | '/api/fees'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -196,6 +207,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/api/fb'
     | '/api/budget'
+    | '/api/fees'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -208,6 +220,7 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   ApiFbRoute: typeof ApiFbRoute
   ApiBudgetRoute: typeof ApiBudgetRoute
+  ApiFeesRoute: typeof ApiFeesRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
@@ -249,6 +262,13 @@ declare module '@tanstack/react-router' {
       path: '/api/budget'
       fullPath: '/api/budget'
       preLoaderRoute: typeof ApiBudgetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/fees': {
+      id: '/api/fees'
+      path: '/api/fees'
+      fullPath: '/api/fees'
+      preLoaderRoute: typeof ApiFeesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/settings': {
@@ -350,6 +370,7 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   ApiFbRoute: ApiFbRoute,
   ApiBudgetRoute: ApiBudgetRoute,
+  ApiFeesRoute: ApiFeesRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,

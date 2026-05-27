@@ -40,10 +40,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Trash2, RefreshCw } from "lucide-react";
+import { Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getSetting, setSetting } from "@/lib/supabase";
-import { mockFees } from "@/data/mockData";
+import { addFee, deleteFee, listFees } from "@/lib/fees";
 import type { Fee } from "@/types";
 
 export const Route = createFileRoute("/_app/settings")({
@@ -151,7 +151,11 @@ function FacebookTab() {
 }
 
 function FeesTab() {
-  const [fees, setFees] = useState<Fee[]>(mockFees);
+  // Sem seed: a lista começa vazia e é populada do banco. O líquido do
+  // dashboard NÃO depende destas taxas — vem de net_amount (producer.amount).
+  const [fees, setFees] = useState<Fee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Omit<Fee, "id">>({
     name: "",
@@ -160,17 +164,50 @@ function FeesTab() {
     appliesTo: "revenue",
   });
 
-  function add() {
+  useEffect(() => {
+    let cancelled = false;
+    listFees()
+      .then((rows) => {
+        if (!cancelled) setFees(rows);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) toast.error(`Falha ao carregar taxas: ${e.message}`);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function add() {
     if (!draft.name) return;
-    setFees((f) => [...f, { ...draft, id: `fee-${Date.now()}` }]);
-    setDraft({ name: "", kind: "percent", value: 0, appliesTo: "revenue" });
-    setOpen(false);
-    toast.success("Taxa adicionada");
+    setBusy(true);
+    try {
+      const created = await addFee(draft);
+      setFees((f) => [...f, created]);
+      setDraft({ name: "", kind: "percent", value: 0, appliesTo: "revenue" });
+      setOpen(false);
+      toast.success("Taxa adicionada");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function remove(id: string) {
-    setFees((f) => f.filter((x) => x.id !== id));
-    toast.success("Taxa removida");
+  async function remove(id: string) {
+    setBusy(true);
+    try {
+      await deleteFee(id);
+      setFees((f) => f.filter((x) => x.id !== id));
+      toast.success("Taxa removida");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -216,8 +253,10 @@ function FeesTab() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button onClick={add}>Adicionar</Button>
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancelar</Button>
+              <Button onClick={add} disabled={busy || !draft.name}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Adicionar"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -234,6 +273,21 @@ function FeesTab() {
             </TableRow>
           </TableHeader>
           <TableBody>
+            {loading && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                  <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
+                  Carregando...
+                </TableCell>
+              </TableRow>
+            )}
+            {!loading && fees.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                  Nenhuma taxa cadastrada.
+                </TableCell>
+              </TableRow>
+            )}
             {fees.map((f) => (
               <TableRow key={f.id}>
                 <TableCell className="font-medium">{f.name}</TableCell>
@@ -243,7 +297,7 @@ function FeesTab() {
                 <TableCell className="text-right">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" disabled={busy}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </AlertDialogTrigger>
