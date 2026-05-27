@@ -34,6 +34,24 @@ async function graph(path: string, token: string) {
   return json;
 }
 
+// Constrói o trecho de query string que delimita o período pro insights.
+// Aceita ou um `preset` (date_preset=...) OU um par {since, until} (time_range={...}).
+// Mantém compat com chamadas que só passam preset.
+function rangeParam(opts: {
+  preset?: string | null;
+  since?: string | null;
+  until?: string | null;
+}): string {
+  const since = opts.since?.trim();
+  const until = opts.until?.trim();
+  if (since && until) {
+    const tr = JSON.stringify({ since, until });
+    return `time_range=${encodeURIComponent(tr)}`;
+  }
+  const preset = opts.preset?.trim() || "last_7d";
+  return `date_preset=${encodeURIComponent(preset)}`;
+}
+
 function parseInsights(arr: any[] | undefined) {
   const i = arr?.[0];
   if (!i)
@@ -100,6 +118,16 @@ export const Route = createFileRoute("/api/fb")({
         const url = new URL(request.url);
         const resource = url.searchParams.get("resource") ?? "status";
         const preset = url.searchParams.get("preset") ?? "last_7d";
+        const since = url.searchParams.get("since");
+        const until = url.searchParams.get("until");
+        const range = rangeParam({ preset, since, until });
+        // Para insights aninhados em campaigns/adsets/ads o Graph aceita o
+        // mesmo time_range, mas com sintaxe um pouco diferente — montamos um
+        // string com chaves do tipo `time_range({...})` quando necessário.
+        const nestedRange =
+          since && until
+            ? `time_range({"since":"${since}","until":"${until}"})`
+            : `date_preset(${preset})`;
         const id = url.searchParams.get("id") ?? "";
         const { token, accountId } = getCreds();
 
@@ -120,7 +148,7 @@ export const Route = createFileRoute("/api/fb")({
           switch (resource) {
             case "account_insights": {
               const j = await graph(
-                `/${accountId}/insights?fields=${INSIGHTS_FIELDS}&date_preset=${preset}`,
+                `/${accountId}/insights?fields=${INSIGHTS_FIELDS}&${range}`,
                 token,
               );
               const i = parseInsights(j.data);
@@ -135,7 +163,7 @@ export const Route = createFileRoute("/api/fb")({
             }
             case "timeseries": {
               const j = await graph(
-                `/${accountId}/insights?fields=spend,impressions,clicks&date_preset=${preset}&time_increment=1`,
+                `/${accountId}/insights?fields=spend,impressions,clicks&${range}&time_increment=1`,
                 token,
               );
               return jsonResponse(
@@ -148,7 +176,7 @@ export const Route = createFileRoute("/api/fb")({
               );
             }
             case "campaigns": {
-              const fields = `id,name,status,daily_budget,lifetime_budget,insights.date_preset(${preset}){${INSIGHTS_FIELDS}}`;
+              const fields = `id,name,status,daily_budget,lifetime_budget,insights.${nestedRange}{${INSIGHTS_FIELDS}}`;
               const j = await graph(
                 `/${accountId}/campaigns?fields=${fields}&limit=200`,
                 token,
@@ -158,7 +186,6 @@ export const Route = createFileRoute("/api/fb")({
                   id: c.id,
                   name: c.name,
                   status: c.status,
-                  // orçamentos vêm em UNIDADE MÍNIMA da moeda da conta (centavos)
                   daily_budget: c.daily_budget != null ? Number(c.daily_budget) : null,
                   lifetime_budget:
                     c.lifetime_budget != null ? Number(c.lifetime_budget) : null,
@@ -185,7 +212,7 @@ export const Route = createFileRoute("/api/fb")({
             }
             case "adsets": {
               if (!id) return jsonResponse([]);
-              const fields = `id,name,status,campaign_id,insights.date_preset(${preset}){${INSIGHTS_FIELDS}}`;
+              const fields = `id,name,status,campaign_id,insights.${nestedRange}{${INSIGHTS_FIELDS}}`;
               const j = await graph(
                 `/${id}/adsets?fields=${fields}&limit=200`,
                 token,
@@ -202,7 +229,7 @@ export const Route = createFileRoute("/api/fb")({
             }
             case "ads": {
               if (!id) return jsonResponse([]);
-              const fields = `id,name,status,adset_id,campaign_id,insights.date_preset(${preset}){${INSIGHTS_FIELDS}}`;
+              const fields = `id,name,status,adset_id,campaign_id,insights.${nestedRange}{${INSIGHTS_FIELDS}}`;
               const j = await graph(
                 `/${id}/ads?fields=${fields}&limit=200`,
                 token,

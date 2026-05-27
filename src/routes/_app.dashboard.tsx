@@ -9,6 +9,17 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import {
   LineChart,
   Line,
   CartesianGrid,
@@ -18,13 +29,13 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { Loader2 } from "lucide-react";
 import { brl, num } from "@/lib/format";
 import {
   fetchAccountInsights,
   fetchAccountTimeseries,
   fetchCampaigns,
   type DatePreset,
+  type DateRange,
 } from "@/lib/facebook-api";
 import { fetchUsdBrl } from "@/lib/currency";
 import { supabase } from "@/lib/supabase";
@@ -37,7 +48,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — AdsTracker" }] }),
   component: DashboardPage,
@@ -67,62 +77,201 @@ type SaleSummaryRow = {
   created_at: string | null;
 };
 
-function isApprovedSaleStatus(status: string | null | undefined) {
-  // usa o helper compartilhado: status vazio/desconhecido NÃO conta como aprovado
-  return isApprovedStatus(status);
-}
-
 function getSaleEventDate(sale: SaleSummaryRow) {
   const rawDate = sale.approved_at ?? sale.order_date ?? sale.created_at;
   if (!rawDate) return null;
-
   const date = new Date(rawDate);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function isSaleInPreset(sale: SaleSummaryRow, preset: DatePreset) {
-  const date = getSaleEventDate(sale);
-  if (!date) return false;
-
+// Resolve um DateRange (preset OU custom) em {start, end} no fuso local.
+// Usado pra filtrar as vendas do banco. O Meta lida com o mesmo intervalo via
+// `time_range` no servidor.
+function resolveRange(range: DateRange): { start: Date | null; end: Date } {
   const now = new Date();
   const startOfToday = new Date(now);
   startOfToday.setHours(0, 0, 0, 0);
+  const endOfNow = new Date(now);
 
-  switch (preset) {
+  if (range.type === "custom") {
+    const start = new Date(`${range.since}T00:00:00`);
+    const end = new Date(`${range.until}T23:59:59`);
+    return { start, end };
+  }
+
+  switch (range.preset) {
     case "today":
-      return date >= startOfToday;
+      return { start: startOfToday, end: endOfNow };
     case "yesterday": {
       const start = new Date(startOfToday);
       start.setDate(start.getDate() - 1);
-      return date >= start && date < startOfToday;
+      const end = new Date(startOfToday);
+      end.setMilliseconds(-1);
+      return { start, end };
     }
     case "last_7d": {
       const start = new Date(startOfToday);
       start.setDate(start.getDate() - 6);
-      return date >= start;
+      return { start, end: endOfNow };
     }
     case "last_30d": {
       const start = new Date(startOfToday);
       start.setDate(start.getDate() - 29);
-      return date >= start;
+      return { start, end: endOfNow };
     }
     case "this_month": {
       const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      return date >= start;
+      return { start, end: endOfNow };
     }
     case "last_month": {
       const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const end = new Date(now.getFullYear(), now.getMonth(), 1);
-      return date >= start && date < end;
+      end.setMilliseconds(-1);
+      return { start, end };
     }
     case "maximum":
     default:
-      return true;
+      return { start: null, end: endOfNow };
   }
 }
 
+function isSaleInRange(sale: SaleSummaryRow, range: DateRange) {
+  const d = getSaleEventDate(sale);
+  if (!d) return false;
+  const { start, end } = resolveRange(range);
+  if (start && d < start) return false;
+  if (d > end) return false;
+  return true;
+}
+
+function fmtIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function fmtBrDate(d: Date): string {
+  return d.toLocaleDateString("pt-BR");
+}
+
+const PRESET_LABELS: Record<DatePreset, string> = {
+  today: "Hoje",
+  yesterday: "Ontem",
+  last_7d: "Últimos 7 dias",
+  last_30d: "Últimos 30 dias",
+  this_month: "Este mês",
+  last_month: "Mês passado",
+  maximum: "Tudo",
+};
+
+// Picker de período: preset + intervalo personalizado num único controle.
+function DateRangePicker({
+  value,
+  onChange,
+}: {
+  value: DateRange;
+  onChange: (r: DateRange) => void;
+}) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [draftSince, setDraftSince] = useState<Date | undefined>();
+  const [draftUntil, setDraftUntil] = useState<Date | undefined>();
+
+  function applyCustom() {
+    if (!draftSince || !draftUntil) return;
+    const since = draftSince <= draftUntil ? draftSince : draftUntil;
+    const until = draftSince <= draftUntil ? draftUntil : draftSince;
+    onChange({
+      type: "custom",
+      since: fmtIsoDate(since),
+      until: fmtIsoDate(until),
+    });
+    setCalendarOpen(false);
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Select
+        value={value.type === "preset" ? value.preset : "__custom"}
+        onValueChange={(v) => {
+          if (v === "__custom") return;
+          onChange({ type: "preset", preset: v as DatePreset });
+        }}
+      >
+        <SelectTrigger className="w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="today">{PRESET_LABELS.today}</SelectItem>
+          <SelectItem value="yesterday">{PRESET_LABELS.yesterday}</SelectItem>
+          <SelectItem value="last_7d">{PRESET_LABELS.last_7d}</SelectItem>
+          <SelectItem value="last_30d">{PRESET_LABELS.last_30d}</SelectItem>
+          <SelectItem value="this_month">{PRESET_LABELS.this_month}</SelectItem>
+          <SelectItem value="last_month">{PRESET_LABELS.last_month}</SelectItem>
+          <SelectItem value="maximum">{PRESET_LABELS.maximum}</SelectItem>
+          {value.type === "custom" && (
+            <SelectItem value="__custom">
+              {fmtBrDate(new Date(`${value.since}T00:00:00`))} →{" "}
+              {fmtBrDate(new Date(`${value.until}T00:00:00`))}
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2">
+            <CalendarIcon className="h-4 w-4" />
+            <span className="hidden sm:inline">Personalizado</span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-3" align="end">
+          <div className="space-y-3">
+            <Calendar
+              mode="range"
+              selected={{ from: draftSince, to: draftUntil }}
+              onSelect={(r) => {
+                setDraftSince(r?.from);
+                setDraftUntil(r?.to);
+              }}
+              numberOfMonths={2}
+              defaultMonth={
+                value.type === "custom"
+                  ? new Date(`${value.since}T00:00:00`)
+                  : undefined
+              }
+            />
+            <div className="flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setDraftSince(undefined);
+                  setDraftUntil(undefined);
+                  setCalendarOpen(false);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                onClick={applyCustom}
+                disabled={!draftSince || !draftUntil}
+              >
+                Aplicar
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function DashboardPage() {
-  const [preset, setPreset] = useState<DatePreset>("last_7d");
+  const [range, setRange] = useState<DateRange>({
+    type: "preset",
+    preset: "last_7d",
+  });
   // base do ROAS/ROI: bruto (padrão) ou líquido
   const [revenueMode, setRevenueMode] = useState<"gross" | "net">("gross");
 
@@ -133,44 +282,62 @@ function DashboardPage() {
   });
   const rate = fx.data?.rate ?? 5.2;
 
+  // chave estável da query (DateRange é objeto, então serializamos)
+  const rangeKey =
+    range.type === "preset" ? range.preset : `custom:${range.since}:${range.until}`;
+
   const summary = useQuery({
-    queryKey: ["fb-summary", preset],
-    queryFn: () => fetchAccountInsights(preset),
+    queryKey: ["fb-summary", rangeKey],
+    queryFn: () => fetchAccountInsights(range),
   });
 
   const ts = useQuery({
-    queryKey: ["fb-timeseries", preset],
-    queryFn: () => fetchAccountTimeseries(preset),
+    queryKey: ["fb-timeseries", rangeKey],
+    queryFn: () => fetchAccountTimeseries(range),
   });
 
   const top = useQuery({
-    queryKey: ["fb-campaigns-top", preset],
-    queryFn: () => fetchCampaigns(preset),
+    queryKey: ["fb-campaigns-top", rangeKey],
+    queryFn: () => fetchCampaigns(range),
   });
 
   const sales = useQuery({
-    queryKey: ["sales-summary", preset],
+    queryKey: ["sales-summary", rangeKey],
     queryFn: async () => {
       if (!supabase)
-        return { gross: 0, net: 0, refunds: 0, count: 0, refundCount: 0 };
+        return {
+          gross: 0,
+          net: 0,
+          refunds: 0,
+          count: 0,
+          refundCount: 0,
+          rows: [] as SaleSummaryRow[],
+        };
       const { data, error } = await supabase
         .from("sales")
-        .select("amount,net_amount,status,approved_at,order_date,created_at")
-        .limit(5000);
+        .select("amount,net_amount,status,approved_at,order_date,created_at,product,product_name,payment_method")
+        .limit(10000);
       if (error)
-        return { gross: 0, net: 0, refunds: 0, count: 0, refundCount: 0 };
+        return {
+          gross: 0,
+          net: 0,
+          refunds: 0,
+          count: 0,
+          refundCount: 0,
+          rows: [] as SaleSummaryRow[],
+        };
       const inPeriod = ((data ?? []) as SaleSummaryRow[]).filter((s) =>
-        isSaleInPreset(s, preset),
+        isSaleInRange(s, range),
       );
-      const approved = inPeriod.filter((s) => isApprovedSaleStatus(s.status));
+      const approved = inPeriod.filter((s) => isApprovedStatus(s.status));
       const refunded = inPeriod.filter((s) => isRefundStatus(s.status));
       return {
-        // dois totais consistentes — sem misturar bruto e líquido
         gross: approved.reduce((sum, s) => sum + Number(s.amount ?? 0), 0),
         net: approved.reduce((sum, s) => sum + Number(s.net_amount ?? 0), 0),
         refunds: refunded.reduce((sum, s) => sum + Number(s.amount ?? 0), 0),
         count: approved.length,
         refundCount: refunded.length,
+        rows: inPeriod,
       };
     },
   });
@@ -189,15 +356,12 @@ function DashboardPage() {
   const netRevenue = sales.data?.net ?? 0;
   const refunds = sales.data?.refunds ?? 0;
   const refundCount = sales.data?.refundCount ?? 0;
-  // base do ROAS/ROI conforme o toggle (líquido já desconta reembolsos)
-  const revenue =
-    revenueMode === "net" ? netRevenue - refunds : grossRevenue;
+  const revenue = revenueMode === "net" ? netRevenue - refunds : grossRevenue;
   const salesCount = sales.data?.count ?? 0;
   const roas = spend > 0 ? revenue / spend : 0;
   const roi = spend > 0 ? ((revenue - spend) / spend) * 100 : 0;
   const cpa = salesCount > 0 ? spend / salesCount : 0;
-  const refundRate =
-    salesCount > 0 ? (refundCount / salesCount) * 100 : 0;
+  const refundRate = salesCount > 0 ? (refundCount / salesCount) * 100 : 0;
 
   const chartData = (ts.data ?? []).map((d) => ({
     date: new Date(d.date).toLocaleDateString("pt-BR", {
@@ -224,20 +388,16 @@ function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs value={revenueMode} onValueChange={(v) => setRevenueMode(v as "gross" | "net")}>
+          <Tabs
+            value={revenueMode}
+            onValueChange={(v) => setRevenueMode(v as "gross" | "net")}
+          >
             <TabsList>
               <TabsTrigger value="gross">Bruto</TabsTrigger>
               <TabsTrigger value="net">Líquido</TabsTrigger>
             </TabsList>
           </Tabs>
-          <Tabs value={preset} onValueChange={(v) => setPreset(v as DatePreset)}>
-            <TabsList>
-              <TabsTrigger value="today">Hoje</TabsTrigger>
-              <TabsTrigger value="last_7d">7 dias</TabsTrigger>
-              <TabsTrigger value="last_30d">30 dias</TabsTrigger>
-              <TabsTrigger value="this_month">Mês</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <DateRangePicker value={range} onChange={setRange} />
         </div>
       </div>
 
@@ -258,7 +418,10 @@ function DashboardPage() {
             <Metric label="Gasto com Ads" value={brl(spend)} />
             <Metric label="Faturamento Bruto" value={brl(grossRevenue)} />
             <Metric label="Faturamento Líquido" value={brl(netRevenue)} />
-            <Metric label="Reembolsos" value={`${brl(refunds)} (${refundRate.toFixed(1)}%)`} />
+            <Metric
+              label="Reembolsos"
+              value={`${brl(refunds)} (${refundRate.toFixed(1)}%)`}
+            />
             <Metric label="ROI" value={`${roi.toFixed(1)}%`} />
             <Metric label="ROAS" value={`${roas.toFixed(2)}x`} />
             <Metric label="CPA" value={brl(cpa)} />
@@ -366,6 +529,7 @@ function DashboardPage() {
               )}
             </CardContent>
           </Card>
+
         </>
       )}
     </div>

@@ -37,6 +37,7 @@ import {
   fetchAds,
   fetchAllAds,
   type DatePreset,
+  type DateRange,
   type FBCampaign,
   type FBAdSet,
   type FBAd,
@@ -232,9 +233,10 @@ function AdSetRow({
   attr: AttributedSales;
 }) {
   const [open, setOpen] = useState(false);
+  const range: DateRange = { type: "preset", preset };
   const { data: ads, isLoading } = useQuery({
     queryKey: ["fb-ads", adset.id, preset],
-    queryFn: () => fetchAds(adset.id, preset),
+    queryFn: () => fetchAds(adset.id, range),
     enabled: open,
   });
   return (
@@ -288,9 +290,10 @@ function CampaignRow({
 }) {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const range: DateRange = { type: "preset", preset };
   const { data: adsets, isLoading } = useQuery({
     queryKey: ["fb-adsets", campaign.id, preset],
-    queryFn: () => fetchAdSets(campaign.id, preset),
+    queryFn: () => fetchAdSets(campaign.id, range),
     enabled: open,
   });
   const agg = attr.byCampaign.get(campaign.id);
@@ -553,9 +556,10 @@ function CampaignsPage() {
     }
   }
 
+  const pageRange: DateRange = { type: "preset", preset };
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["fb-campaigns", preset],
-    queryFn: () => fetchCampaigns(preset),
+    queryFn: () => fetchCampaigns(pageRange),
   });
 
   const allAds = useQuery({
