@@ -103,8 +103,52 @@ function GeneralTab() {
           </Select>
         </div>
         <Button onClick={save}>Salvar</Button>
+        <div className="pt-4 border-t border-border">
+          <ReprocessNetButton />
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ReprocessNetButton() {
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/backfill-net", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        throw new Error(json?.error ?? `HTTP ${res.status}`);
+      }
+      toast.success(
+        `Reprocessado: ${json.updated} atualizadas, ${json.skipped} ignoradas (${json.scanned} analisadas)`,
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-2">
+      <Label>Reprocessar líquido das vendas</Label>
+      <p className="text-xs text-muted-foreground">
+        Recalcula <code>net_amount</code> a partir de <code>producer.amount</code>{" "}
+        do webhook salvo. Útil para corrigir vendas antigas afetadas pelo bug
+        de mapeamento da Ticto v2. É seguro rodar várias vezes.
+      </p>
+      <Button variant="outline" onClick={run} disabled={busy}>
+        {busy ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Reprocessando...
+          </>
+        ) : (
+          "Reprocessar líquido"
+        )}
+      </Button>
+    </div>
   );
 }
 
