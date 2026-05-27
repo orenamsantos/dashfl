@@ -118,3 +118,30 @@ export async function fetchAds(
 export async function fetchAllAds(): Promise<FBAdLite[]> {
   return fb({ resource: "all_ads" });
 }
+
+// Atualiza o orçamento de uma campanha CBO. O valor é em centavos da moeda
+// da conta (USD para contas em USD). A chamada PRECISA passar pelo nosso
+// /api/budget (autenticado por cookie + token do servidor) — nunca direto
+// do navegador.
+export interface UpdateBudgetRequest {
+  campaign_id: string;
+  daily_budget?: number; // centavos
+  lifetime_budget?: number; // centavos
+}
+
+export async function updateCampaignBudget(req: UpdateBudgetRequest): Promise<{
+  ok: true;
+}> {
+  const res = await fetch("/api/budget", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  const json = await res.json();
+  if (!res.ok || json?.error) {
+    const err = new Error(json?.error ?? `HTTP ${res.status}`);
+    (err as Error & { permission?: boolean }).permission = Boolean(json?.permission);
+    throw err;
+  }
+  return { ok: true };
+}

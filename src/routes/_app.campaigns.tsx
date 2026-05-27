@@ -27,7 +27,9 @@ import {
   AlertCircle,
   ArrowUp,
   ArrowDown,
+  Pencil,
 } from "lucide-react";
+import { BudgetEditDialog } from "@/components/budget-edit-dialog";
 import { brl, num } from "@/lib/format";
 import {
   fetchCampaigns,
@@ -285,6 +287,7 @@ function CampaignRow({
   attr: AttributedSales;
 }) {
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const { data: adsets, isLoading } = useQuery({
     queryKey: ["fb-adsets", campaign.id, preset],
     queryFn: () => fetchAdSets(campaign.id, preset),
@@ -297,7 +300,7 @@ function CampaignRow({
         className="cursor-pointer"
         onClick={() => setOpen((o) => !o)}
       >
-        <TableCell colSpan={2} className="font-medium">
+        <TableCell className="font-medium">
           <span className="inline-flex items-center gap-2">
             {open ? (
               <ChevronDown className="h-4 w-4" />
@@ -307,11 +310,31 @@ function CampaignRow({
             {campaign.name}
           </span>
         </TableCell>
+        <TableCell className="w-10">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title="Editar orçamento"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditOpen(true);
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        </TableCell>
         <TableCell>
           <StatusBadge s={campaign.status} />
         </TableCell>
         <MetricsCells m={campaign.insights} rate={rate} agg={agg} />
       </TableRow>
+      <BudgetEditDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        campaign={campaign}
+        rate={rate}
+      />
       {open && isLoading && (
         <TableRow>
           <TableCell colSpan={16} className="text-center text-muted-foreground">

@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ApiFbRouteImport } from './routes/api/fb'
+import { Route as ApiBudgetRouteImport } from './routes/api/budget'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
 import { Route as AppIntegrationsRouteImport } from './routes/_app.integrations'
@@ -41,6 +42,11 @@ const LoginRoute = LoginRouteImport.update({
 const ApiFbRoute = ApiFbRouteImport.update({
   id: '/api/fb',
   path: '/api/fb',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBudgetRoute = ApiBudgetRouteImport.update({
+  id: '/api/budget',
+  path: '/api/budget',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
+  '/api/budget': typeof ApiBudgetRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -119,6 +126,7 @@ export interface FileRoutesByTo {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
+  '/api/budget': typeof ApiBudgetRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -136,6 +144,7 @@ export interface FileRoutesById {
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
+  '/api/budget': typeof ApiBudgetRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -153,6 +162,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/api/fb'
+    | '/api/budget'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/api/fb'
+    | '/api/budget'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/_app/sales'
     | '/_app/settings'
     | '/api/fb'
+    | '/api/budget'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -195,6 +207,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   AppRoute: typeof AppRouteWithChildren
   ApiFbRoute: typeof ApiFbRoute
+  ApiBudgetRoute: typeof ApiBudgetRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
@@ -229,6 +242,13 @@ declare module '@tanstack/react-router' {
       path: '/api/fb'
       fullPath: '/api/fb'
       preLoaderRoute: typeof ApiFbRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/budget': {
+      id: '/api/budget'
+      path: '/api/budget'
+      fullPath: '/api/budget'
+      preLoaderRoute: typeof ApiBudgetRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/settings': {
@@ -329,6 +349,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   AppRoute: AppRouteWithChildren,
   ApiFbRoute: ApiFbRoute,
+  ApiBudgetRoute: ApiBudgetRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
