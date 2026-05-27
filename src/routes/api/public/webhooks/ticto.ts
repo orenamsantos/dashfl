@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
-import { normalizeStatus } from "@/lib/status";
+import { normalizeStatus, isApprovedStatus } from "@/lib/status";
 
-// Ticto webhook receiver.
+// Ticto webhook receiver (Ticto v2 — https://webhook.ticto.dev/docs/v2).
 // Configure in Ticto: URL = https://<your-domain>/api/public/webhooks/ticto?token=<TICTO_WEBHOOK_TOKEN>
-// The token query param must match the TICTO_WEBHOOK_TOKEN secret.
+// O token pode vir no body (`token`), na query (?token=) ou em x-ticto-token.
 
 function getAdmin() {
   const url = process.env.SUPABASE_URL;
@@ -15,14 +15,31 @@ function getAdmin() {
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
-// status normalization shared with the CSV import (see @/lib/status)
-const mapStatus = normalizeStatus;
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
 
-function num(v: unknown): number {
-  if (v == null) return 0;
-  if (typeof v === "number") return v;
-  const n = Number(String(v).replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
+// "Não Informado" é o placeholder que a Ticto envia quando o campo está vazio.
+// Tratamos como null pra não gravar uma string falsa como se fosse uma campanha.
+const TICTO_NULL = new Set([
+  "nao informado",
+  "não informado",
+  "n/a",
+  "",
+]);
+
+function clean(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const norm = s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+  if (TICTO_NULL.has(norm)) return null;
+  return s;
 }
 
 function pick<T = unknown>(obj: any, ...keys: string[]): T | undefined {
@@ -35,11 +52,42 @@ function pick<T = unknown>(obj: any, ...keys: string[]): T | undefined {
   return undefined;
 }
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+// Centavos (inteiro) → reais (float). Aceita "11052" ou 11052.
+function centsToReais(v: unknown): number {
+  if (v == null) return 0;
+  const n = Number(String(v).replace(",", "."));
+  if (!Number.isFinite(n)) return 0;
+  return n / 100;
+}
+
+// String em reais com ponto decimal ("110.52") → float. Aceita também vírgula.
+function parseReais(v: unknown): number {
+  if (v == null) return 0;
+  const n = Number(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Soma os order bumps (em reais com decimais, ex. "1000.00") quando enviados.
+function sumBumps(payload: any): number {
+  const bumps = payload?.bumps;
+  if (!Array.isArray(bumps)) return 0;
+  let total = 0;
+  for (const b of bumps) {
+    total += parseReais(b?.offer_price ?? b?.price ?? b?.amount);
+  }
+  return total;
+}
+
+// payment_method da Ticto v2 → label legível
+function mapPaymentMethod(raw: unknown): string | null {
+  const v = clean(raw);
+  if (!v) return null;
+  const k = v.toLowerCase();
+  if (k === "pix") return "Pix";
+  if (k === "credit_card" || k === "creditcard") return "Cartão de Crédito";
+  if (k === "bank_slip" || k === "bankslip" || k === "boleto") return "Boleto";
+  return v;
+}
 
 export const Route = createFileRoute("/api/public/webhooks/ticto")({
   server: {
@@ -81,8 +129,6 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
           });
         }
 
-        // Ticto sends the token inside the JSON body as `token`.
-        // Also accept ?token=... query or x-ticto-token header for flexibility.
         const provided =
           (typeof payload?.token === "string" ? payload.token : undefined) ??
           url.searchParams.get("token") ??
@@ -96,10 +142,11 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
           });
         }
 
-        // Ticto payloads vary by event. Map across common shapes.
+        // --- id: mesma chave do CSV (transaction_hash) pra dedupe consistente
         const transactionId =
           pick<string>(
             payload,
+            "order.transaction_hash",
             "transaction.hash",
             "transaction.id",
             "order.hash",
@@ -108,7 +155,63 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
             "hash",
           ) ?? `ticto_${Date.now()}`;
 
-        const product =
+        // --- status canônico (mapStatus) ANTES do cálculo do net_amount
+        const statusRaw = pick(
+          payload,
+          "status",
+          "transaction.status",
+          "order.status",
+        );
+        const status = normalizeStatus(statusRaw);
+
+        // --- bruto: item.amount está em CENTAVOS; bumps[].offer_price em REAIS
+        const itemAmount = centsToReais(
+          pick(payload, "item.amount", "item.price", "transaction.amount"),
+        );
+        const bumpTotal = sumBumps(payload);
+        // Soma bumps quando vêm no mesmo pedido (config "Combo junto com a
+        // oferta principal"). Sem bumps, fica só o item.
+        const amount = itemAmount + bumpTotal;
+
+        // --- líquido: producer.amount em CENTAVOS; producer.cms em REAIS (string).
+        // Só faz sentido quando o pagamento foi de fato confirmado (authorized).
+        // Em pix_created / waiting_payment NÃO há comissão ainda — fica null.
+        let net_amount: number | null = null;
+        if (isApprovedStatus(status)) {
+          const producerCents = pick(payload, "producer.amount");
+          if (producerCents != null && String(producerCents).trim() !== "") {
+            net_amount = centsToReais(producerCents);
+          } else {
+            const cms = pick(payload, "producer.cms");
+            if (cms != null && String(cms).trim() !== "") {
+              net_amount = parseReais(cms);
+            }
+          }
+        }
+
+        // --- tracking (utms / src / sck) — "Não Informado" vira null
+        const tracking = payload?.tracking ?? {};
+        const utm_source = clean(
+          tracking.utm_source ?? pick(payload, "utm.utm_source", "utm_source"),
+        );
+        const utm_medium = clean(
+          tracking.utm_medium ?? pick(payload, "utm.utm_medium", "utm_medium"),
+        );
+        const utm_campaign = clean(
+          tracking.utm_campaign ??
+            pick(payload, "utm.utm_campaign", "utm_campaign"),
+        );
+        const utm_content = clean(
+          tracking.utm_content ??
+            pick(payload, "utm.utm_content", "utm_content"),
+        );
+        const utm_term = clean(
+          tracking.utm_term ?? pick(payload, "utm.utm_term", "utm_term"),
+        );
+        const src = clean(tracking.src ?? pick(payload, "src"));
+        const sck = clean(tracking.sck ?? pick(payload, "sck"));
+
+        const product = clean(
           pick<string>(
             payload,
             "item.product_name",
@@ -116,43 +219,39 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
             "product_name",
             "item.name",
             "name",
-          ) ?? "—";
-
-        const amount = num(
-          pick(
-            payload,
-            "transaction.paid_amount",
-            "transaction.amount",
-            "order.paid_amount",
-            "order.amount",
-            "amount",
-            "value",
           ),
         );
-        // Ticto sends values in cents in some events; heuristic: if integer >= 1000 and no decimal char, assume cents
-        const normalizedAmount =
-          amount > 1000 && Number.isInteger(amount) ? amount / 100 : amount;
-
-        const statusRaw = pick(
-          payload,
-          "status",
-          "transaction.status",
-          "order.status",
+        const offer = clean(
+          pick<string>(payload, "item.offer_name", "offer.name", "offer_name"),
         );
-
-        const utm_source = pick<string>(payload, "utm.utm_source", "utm_source", "tracking.utm_source");
-        const utm_medium = pick<string>(payload, "utm.utm_medium", "utm_medium", "tracking.utm_medium");
-        const utm_campaign = pick<string>(payload, "utm.utm_campaign", "utm_campaign", "tracking.utm_campaign");
-        const utm_content = pick<string>(payload, "utm.utm_content", "utm_content", "tracking.utm_content");
-        const utm_term = pick<string>(payload, "utm.utm_term", "utm_term", "tracking.utm_term");
-        const src = pick<string>(payload, "src", "tracking.src");
-        const sck = pick<string>(payload, "sck", "tracking.sck");
-        const offer = pick<string>(payload, "item.offer_name", "offer.name", "offer_name");
-        const payment_method = pick<string>(payload, "transaction.payment_method", "payment_method", "method");
-        const order_date = pick<string>(payload, "transaction.created_at", "order.created_at", "created_at");
-        const approved_at = pick<string>(payload, "transaction.paid_at", "order.paid_at", "paid_at", "approved_at");
-        const affiliate = pick<string>(payload, "affiliate.name", "affiliate_name", "affiliate");
-        const net_amount = num(pick(payload, "transaction.producer_amount", "producer_amount", "net_amount"));
+        const payment_method = mapPaymentMethod(
+          pick(
+            payload,
+            "payment_method",
+            "transaction.payment_method",
+            "method",
+          ),
+        );
+        const order_date = clean(
+          pick<string>(
+            payload,
+            "order.created_at",
+            "transaction.created_at",
+            "created_at",
+          ),
+        );
+        const approved_at = clean(
+          pick<string>(
+            payload,
+            "transaction.paid_at",
+            "order.paid_at",
+            "paid_at",
+            "approved_at",
+          ),
+        );
+        const affiliate = clean(
+          pick<string>(payload, "affiliate.name", "affiliate_name", "affiliate"),
+        );
 
         const row = {
           id: String(transactionId),
@@ -160,27 +259,27 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
           source: "Ticto",
           product,
           product_name: product,
-          offer: offer ?? null,
-          amount: normalizedAmount,
-          net_amount: net_amount || null,
-          status: mapStatus(statusRaw),
-          payment_method: payment_method ?? null,
-          order_date: order_date ?? null,
-          approved_at: approved_at ?? null,
-          campaign: utm_campaign ?? null,
-          campaign_name: utm_campaign ?? null,
-          adset: utm_content ?? null,
-          adset_name: utm_content ?? null,
-          ad: utm_term ?? null,
-          ad_name: utm_term ?? null,
-          utm_source: utm_source ?? null,
-          utm_medium: utm_medium ?? null,
-          utm_campaign: utm_campaign ?? null,
-          utm_content: utm_content ?? null,
-          utm_term: utm_term ?? null,
-          src: src ?? null,
-          sck: sck ?? null,
-          affiliate: affiliate ?? null,
+          offer,
+          amount,
+          net_amount,
+          status,
+          payment_method,
+          order_date,
+          approved_at,
+          campaign: utm_campaign,
+          campaign_name: utm_campaign,
+          adset: utm_content,
+          adset_name: utm_content,
+          ad: utm_term,
+          ad_name: utm_term,
+          utm_source,
+          utm_medium,
+          utm_campaign,
+          utm_content,
+          utm_term,
+          src,
+          sck,
+          affiliate,
           raw: payload,
         };
 
@@ -190,7 +289,7 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
             .from("sales")
             .upsert(row, { onConflict: "id" });
           if (error) {
-            // retry without `raw` column (if column doesn't exist)
+            // retry without `raw` if the column doesn't exist
             const { raw: _omit, ...rest } = row;
             const retry = await admin
               .from("sales")

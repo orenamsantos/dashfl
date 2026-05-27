@@ -13,11 +13,15 @@ export const STATUS_MAP: Record<string, string> = {
   pago: "Aprovada",
   paga: "Aprovada",
   paid: "Aprovada",
-  // pendente
+  // pendente (inclui Pix gerado / boleto impresso aguardando pagamento)
   pending: "Pendente",
   pendente: "Pendente",
   waiting_payment: "Pendente",
   "aguardando pagamento": "Pendente",
+  pix_created: "Pendente",
+  "pix gerado": "Pendente",
+  bank_slip_created: "Pendente",
+  "boleto impresso": "Pendente",
   // reembolsada / estorno / chargeback / cancelamento
   refunded: "Reembolsada",
   reembolsada: "Reembolsada",
@@ -36,6 +40,10 @@ export const STATUS_MAP: Record<string, string> = {
   // expirada
   expirado: "Expirada",
   expirada: "Expirada",
+  pix_expired: "Expirada",
+  // abandonada
+  abandoned_cart: "Abandonada",
+  abandonada: "Abandonada",
 };
 
 export function normalizeStatus(s: unknown): string {
