@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as ApiFbRouteImport } from './routes/api/fb'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
@@ -18,6 +19,9 @@ import { Route as AppIntegrationsRouteImport } from './routes/_app.integrations'
 import { Route as AppImportRouteImport } from './routes/_app.import'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCampaignsRouteImport } from './routes/_app.campaigns'
+import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
+import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth/logout'
+import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
 import { Route as ApiPublicWebhooksTictoRouteImport } from './routes/api/public/webhooks/ticto'
 
 const AppRoute = AppRouteImport.update({
@@ -27,6 +31,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiFbRoute = ApiFbRouteImport.update({
@@ -64,6 +73,21 @@ const AppCampaignsRoute = AppCampaignsRouteImport.update({
   path: '/campaigns',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
+  id: '/api/auth/login',
+  path: '/api/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
+  id: '/api/auth/logout',
+  path: '/api/auth/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthMeRoute = ApiAuthMeRouteImport.update({
+  id: '/api/auth/me',
+  path: '/api/auth/me',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWebhooksTictoRoute = ApiPublicWebhooksTictoRouteImport.update({
   id: '/api/public/webhooks/ticto',
   path: '/api/public/webhooks/ticto',
@@ -72,6 +96,7 @@ const ApiPublicWebhooksTictoRoute = ApiPublicWebhooksTictoRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/campaigns': typeof AppCampaignsRoute
   '/dashboard': typeof AppDashboardRoute
   '/import': typeof AppImportRoute
@@ -79,10 +104,14 @@ export interface FileRoutesByFullPath {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/me': typeof ApiAuthMeRoute
   '/api/public/webhooks/ticto': typeof ApiPublicWebhooksTictoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/campaigns': typeof AppCampaignsRoute
   '/dashboard': typeof AppDashboardRoute
   '/import': typeof AppImportRoute
@@ -90,11 +119,15 @@ export interface FileRoutesByTo {
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/me': typeof ApiAuthMeRoute
   '/api/public/webhooks/ticto': typeof ApiPublicWebhooksTictoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/_app': typeof AppRouteWithChildren
   '/_app/campaigns': typeof AppCampaignsRoute
   '/_app/dashboard': typeof AppDashboardRoute
@@ -103,12 +136,16 @@ export interface FileRoutesById {
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
   '/api/fb': typeof ApiFbRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/logout': typeof ApiAuthLogoutRoute
+  '/api/auth/me': typeof ApiAuthMeRoute
   '/api/public/webhooks/ticto': typeof ApiPublicWebhooksTictoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/campaigns'
     | '/dashboard'
     | '/import'
@@ -116,10 +153,14 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/api/fb'
+    | '/api/auth/login'
+    | '/api/auth/logout'
+    | '/api/auth/me'
     | '/api/public/webhooks/ticto'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
     | '/campaigns'
     | '/dashboard'
     | '/import'
@@ -127,10 +168,14 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/api/fb'
+    | '/api/auth/login'
+    | '/api/auth/logout'
+    | '/api/auth/me'
     | '/api/public/webhooks/ticto'
   id:
     | '__root__'
     | '/'
+    | '/login'
     | '/_app'
     | '/_app/campaigns'
     | '/_app/dashboard'
@@ -139,13 +184,20 @@ export interface FileRouteTypes {
     | '/_app/sales'
     | '/_app/settings'
     | '/api/fb'
+    | '/api/auth/login'
+    | '/api/auth/logout'
+    | '/api/auth/me'
     | '/api/public/webhooks/ticto'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   AppRoute: typeof AppRouteWithChildren
   ApiFbRoute: typeof ApiFbRoute
+  ApiAuthLoginRoute: typeof ApiAuthLoginRoute
+  ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
+  ApiAuthMeRoute: typeof ApiAuthMeRoute
   ApiPublicWebhooksTictoRoute: typeof ApiPublicWebhooksTictoRoute
 }
 
@@ -163,6 +215,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/fb': {
@@ -214,6 +273,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampaignsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/auth/login': {
+      id: '/api/auth/login'
+      path: '/api/auth/login'
+      fullPath: '/api/auth/login'
+      preLoaderRoute: typeof ApiAuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/logout': {
+      id: '/api/auth/logout'
+      path: '/api/auth/logout'
+      fullPath: '/api/auth/logout'
+      preLoaderRoute: typeof ApiAuthLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/me': {
+      id: '/api/auth/me'
+      path: '/api/auth/me'
+      fullPath: '/api/auth/me'
+      preLoaderRoute: typeof ApiAuthMeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/webhooks/ticto': {
       id: '/api/public/webhooks/ticto'
       path: '/api/public/webhooks/ticto'
@@ -246,8 +326,12 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   AppRoute: AppRouteWithChildren,
   ApiFbRoute: ApiFbRoute,
+  ApiAuthLoginRoute: ApiAuthLoginRoute,
+  ApiAuthLogoutRoute: ApiAuthLogoutRoute,
+  ApiAuthMeRoute: ApiAuthMeRoute,
   ApiPublicWebhooksTictoRoute: ApiPublicWebhooksTictoRoute,
 }
 export const routeTree = rootRouteImport

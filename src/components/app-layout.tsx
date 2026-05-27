@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Link, Outlet, useRouterState, useRouter } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  useRouterState,
+  useRouter,
+  useNavigate,
+} from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Megaphone,
@@ -10,6 +16,7 @@ import {
   Menu,
   RefreshCw,
   X,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,8 +33,19 @@ const nav = [
 export function AppLayout() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const current = nav.find((n) => pathname.startsWith(n.to)) ?? nav[0];
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignora — vamos pro login de qualquer jeito
+    }
+    await router.invalidate();
+    navigate({ to: "/login" });
+  }
 
   return (
     <div className="min-h-screen flex w-full bg-background text-foreground">
@@ -90,7 +108,7 @@ export function AppLayout() {
             <span className="mx-2 opacity-50">/</span>
             <span className="text-foreground font-medium">{current.label}</span>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -99,6 +117,16 @@ export function AppLayout() {
             >
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">Atualizar</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="gap-2"
+              title="Sair"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Sair</span>
             </Button>
           </div>
         </header>
