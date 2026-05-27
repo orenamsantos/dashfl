@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { fetchFBStatus } from "@/lib/facebook-api";
 import {
   Select,
   SelectContent,
@@ -108,62 +109,42 @@ function GeneralTab() {
 }
 
 function FacebookTab() {
-  const [token, setToken] = useState<string | null>(null);
-  const [newToken, setNewToken] = useState("");
-  const [lastSync, setLastSync] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
+  const [status, setStatus] = useState<{
+    configured: boolean;
+    accountId: string | null;
+  } | null>(null);
 
   useEffect(() => {
-    (async () => {
-      setToken(await getSetting("facebook_token"));
-      setLastSync(await getSetting("last_fb_sync"));
-    })();
+    fetchFBStatus()
+      .then(setStatus)
+      .catch(() => setStatus({ configured: false, accountId: null }));
   }, []);
-
-  const masked = token ? `${token.slice(0, 10)}...` : "—";
-
-  async function update() {
-    if (!newToken) return;
-    await setSetting("facebook_token", newToken);
-    setToken(newToken);
-    setNewToken("");
-    toast.success("Token atualizado");
-  }
-
-  async function sync() {
-    setSyncing(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    const now = new Date().toISOString();
-    await setSetting("last_fb_sync", now);
-    setLastSync(now);
-    setSyncing(false);
-    toast.success("Sincronização concluída");
-  }
 
   return (
     <Card>
       <CardHeader><CardTitle>Facebook Ads</CardTitle></CardHeader>
-      <CardContent className="space-y-4 max-w-xl">
-        <div className="space-y-2">
-          <Label>Token atual</Label>
-          <Input readOnly value={masked} className="font-mono" />
-        </div>
-        <div className="space-y-2">
-          <Label>Atualizar token</Label>
-          <div className="flex gap-2">
-            <Input value={newToken} onChange={(e) => setNewToken(e.target.value)} placeholder="Cole o novo token" />
-            <Button onClick={update} disabled={!newToken}>Atualizar</Button>
+      <CardContent className="space-y-3 max-w-xl text-sm">
+        <p className="text-muted-foreground">
+          Por segurança, o token do Facebook é configurado no servidor (variável
+          de ambiente FACEBOOK_TOKEN) e nunca é inserido ou exibido aqui. Para
+          trocar o token, atualize o secret no Cloudflare.
+        </p>
+        {status?.configured ? (
+          <div>
+            <span className="text-muted-foreground">Status:</span>{" "}
+            <span className="font-medium text-[var(--color-success)]">
+              Conectado
+            </span>{" "}
+            <span className="text-muted-foreground">
+              — conta {status.accountId}
+            </span>
           </div>
-        </div>
-        <div className="pt-2 flex items-center gap-3">
-          <Button onClick={sync} disabled={syncing} className="gap-2">
-            <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-            Sincronizar agora
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Última: {lastSync ? new Date(lastSync).toLocaleString("pt-BR") : "nunca"}
-          </span>
-        </div>
+        ) : (
+          <div>
+            <span className="text-muted-foreground">Status:</span>{" "}
+            <span className="font-medium text-destructive">Não configurado</span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

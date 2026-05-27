@@ -1,6 +1,6 @@
-import { getSetting } from "./supabase";
-
-const API = "https://graph.facebook.com/v19.0";
+// Client-side helpers that talk to our OWN server proxy at /api/fb.
+// The Facebook token lives ONLY on the server (FACEBOOK_TOKEN env) and is
+// never sent to, exposed in, or stored by the browser.
 
 export interface FBInsight {
   spend: number;
@@ -45,102 +45,6 @@ export type DatePreset =
   | "last_month"
   | "maximum";
 
-interface FBCreds {
-  token: string;
-  accountId: string;
-}
-
-export async function getFBCreds(): Promise<FBCreds | null> {
-  const token = await getSetting("facebook_token");
-  const accountId = await getSetting("facebook_ad_account_id");
-  if (!token || !accountId) return null;
-  return { token, accountId };
-}
-
-async function fbFetch<T>(path: string, token: string): Promise<T> {
-  const sep = path.includes("?") ? "&" : "?";
-  const url = `${API}${path}${sep}access_token=${encodeURIComponent(token)}`;
-  const res = await fetch(url);
-  const json = await res.json();
-  if (json.error) throw new Error(json.error.message);
-  return json as T;
-}
-
-function parseInsights(arr: any[] | undefined): FBInsight {
-  const i = arr?.[0];
-  if (!i) return { spend: 0, impressions: 0, clicks: 0 };
-  return {
-    spend: Number(i.spend ?? 0),
-    impressions: Number(i.impressions ?? 0),
-    clicks: Number(i.clicks ?? 0),
-    reach: Number(i.reach ?? 0),
-    cpm: Number(i.cpm ?? 0),
-    cpc: Number(i.cpc ?? 0),
-    ctr: Number(i.ctr ?? 0),
-  };
-}
-
-const INSIGHTS_FIELDS = "spend,impressions,clicks,reach,cpm,cpc,ctr";
-
-export async function fetchCampaigns(
-  preset: DatePreset = "last_7d",
-): Promise<FBCampaign[]> {
-  const creds = await getFBCreds();
-  if (!creds) return [];
-  const fields = `id,name,status,insights.date_preset(${preset}){${INSIGHTS_FIELDS}}`;
-  const json = await fbFetch<{ data: any[] }>(
-    `/${creds.accountId}/campaigns?fields=${fields}&limit=200`,
-    creds.token,
-  );
-  return (json.data ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    status: c.status,
-    insights: parseInsights(c.insights?.data),
-  }));
-}
-
-export async function fetchAdSets(
-  campaignId: string,
-  preset: DatePreset = "last_7d",
-): Promise<FBAdSet[]> {
-  const creds = await getFBCreds();
-  if (!creds) return [];
-  const fields = `id,name,status,campaign_id,insights.date_preset(${preset}){${INSIGHTS_FIELDS}}`;
-  const json = await fbFetch<{ data: any[] }>(
-    `/${campaignId}/adsets?fields=${fields}&limit=200`,
-    creds.token,
-  );
-  return (json.data ?? []).map((a) => ({
-    id: a.id,
-    name: a.name,
-    status: a.status,
-    campaign_id: a.campaign_id,
-    insights: parseInsights(a.insights?.data),
-  }));
-}
-
-export async function fetchAds(
-  adsetId: string,
-  preset: DatePreset = "last_7d",
-): Promise<FBAd[]> {
-  const creds = await getFBCreds();
-  if (!creds) return [];
-  const fields = `id,name,status,adset_id,campaign_id,insights.date_preset(${preset}){${INSIGHTS_FIELDS}}`;
-  const json = await fbFetch<{ data: any[] }>(
-    `/${adsetId}/ads?fields=${fields}&limit=200`,
-    creds.token,
-  );
-  return (json.data ?? []).map((a) => ({
-    id: a.id,
-    name: a.name,
-    status: a.status,
-    adset_id: a.adset_id,
-    campaign_id: a.campaign_id,
-    insights: parseInsights(a.insights?.data),
-  }));
-}
-
 export interface AccountSummary {
   spend: number;
   impressions: number;
@@ -150,40 +54,51 @@ export interface AccountSummary {
   ctr: number;
 }
 
+async function fb<T>(params: Record<string, string>): Promise<T> {
+  const qs = new URLSearchParams(params).toString();
+  const res = await fetch(`/api/fb?${qs}`);
+  const json = await res.json();
+  if (json && typeof json === "object" && !Array.isArray(json) && (json as any).error) {
+    throw new Error((json as any).error);
+  }
+  return json as T;
+}
+
+export async function fetchFBStatus(): Promise<{
+  configured: boolean;
+  accountId: string | null;
+}> {
+  return fb({ resource: "status" });
+}
+
 export async function fetchAccountInsights(
   preset: DatePreset = "last_7d",
 ): Promise<AccountSummary> {
-  const creds = await getFBCreds();
-  if (!creds)
-    return { spend: 0, impressions: 0, clicks: 0, cpc: 0, cpm: 0, ctr: 0 };
-  const json = await fbFetch<{ data: any[] }>(
-    `/${creds.accountId}/insights?fields=${INSIGHTS_FIELDS}&date_preset=${preset}`,
-    creds.token,
-  );
-  const i = parseInsights(json.data);
-  return {
-    spend: i.spend,
-    impressions: i.impressions,
-    clicks: i.clicks,
-    cpc: i.cpc ?? 0,
-    cpm: i.cpm ?? 0,
-    ctr: i.ctr ?? 0,
-  };
+  return fb({ resource: "account_insights", preset });
 }
 
 export async function fetchAccountTimeseries(
   preset: DatePreset = "last_7d",
 ): Promise<{ date: string; spend: number; impressions: number; clicks: number }[]> {
-  const creds = await getFBCreds();
-  if (!creds) return [];
-  const json = await fbFetch<{ data: any[] }>(
-    `/${creds.accountId}/insights?fields=spend,impressions,clicks&date_preset=${preset}&time_increment=1`,
-    creds.token,
-  );
-  return (json.data ?? []).map((d) => ({
-    date: d.date_start,
-    spend: Number(d.spend ?? 0),
-    impressions: Number(d.impressions ?? 0),
-    clicks: Number(d.clicks ?? 0),
-  }));
+  return fb({ resource: "timeseries", preset });
+}
+
+export async function fetchCampaigns(
+  preset: DatePreset = "last_7d",
+): Promise<FBCampaign[]> {
+  return fb({ resource: "campaigns", preset });
+}
+
+export async function fetchAdSets(
+  campaignId: string,
+  preset: DatePreset = "last_7d",
+): Promise<FBAdSet[]> {
+  return fb({ resource: "adsets", id: campaignId, preset });
+}
+
+export async function fetchAds(
+  adsetId: string,
+  preset: DatePreset = "last_7d",
+): Promise<FBAd[]> {
+  return fb({ resource: "ads", id: adsetId, preset });
 }

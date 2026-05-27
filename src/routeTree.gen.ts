@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiFbRouteImport } from './routes/api/fb'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
 import { Route as AppIntegrationsRouteImport } from './routes/_app.integrations'
@@ -26,6 +27,11 @@ const AppRoute = AppRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFbRoute = ApiFbRouteImport.update({
+  id: '/api/fb',
+  path: '/api/fb',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/integrations': typeof AppIntegrationsRoute
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
+  '/api/fb': typeof ApiFbRoute
   '/api/public/webhooks/ticto': typeof ApiPublicWebhooksTictoRoute
 }
 export interface FileRoutesByTo {
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/integrations': typeof AppIntegrationsRoute
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
+  '/api/fb': typeof ApiFbRoute
   '/api/public/webhooks/ticto': typeof ApiPublicWebhooksTictoRoute
 }
 export interface FileRoutesById {
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/_app/integrations': typeof AppIntegrationsRoute
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/api/fb': typeof ApiFbRoute
   '/api/public/webhooks/ticto': typeof ApiPublicWebhooksTictoRoute
 }
 export interface FileRouteTypes {
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/sales'
     | '/settings'
+    | '/api/fb'
     | '/api/public/webhooks/ticto'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/sales'
     | '/settings'
+    | '/api/fb'
     | '/api/public/webhooks/ticto'
   id:
     | '__root__'
@@ -127,12 +138,14 @@ export interface FileRouteTypes {
     | '/_app/integrations'
     | '/_app/sales'
     | '/_app/settings'
+    | '/api/fb'
     | '/api/public/webhooks/ticto'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
+  ApiFbRoute: typeof ApiFbRoute
   ApiPublicWebhooksTictoRoute: typeof ApiPublicWebhooksTictoRoute
 }
 
@@ -150,6 +163,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/fb': {
+      id: '/api/fb'
+      path: '/api/fb'
+      fullPath: '/api/fb'
+      preLoaderRoute: typeof ApiFbRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/settings': {
@@ -227,8 +247,19 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
+  ApiFbRoute: ApiFbRoute,
   ApiPublicWebhooksTictoRoute: ApiPublicWebhooksTictoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
