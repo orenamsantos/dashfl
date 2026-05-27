@@ -148,7 +148,7 @@ export const Route = createFileRoute("/api/fb")({
               );
             }
             case "campaigns": {
-              const fields = `id,name,status,daily_budget,lifetime_budget,insights.date_preset(${preset}){${INSIGHTS_FIELDS},reach,frequency}`;
+              const fields = `id,name,status,daily_budget,lifetime_budget,insights.date_preset(${preset}){${INSIGHTS_FIELDS}}`;
               const j = await graph(
                 `/${accountId}/campaigns?fields=${fields}&limit=200`,
                 token,
