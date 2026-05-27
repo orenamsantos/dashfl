@@ -51,6 +51,7 @@ import {
   type AttributionIndex,
 } from "@/lib/attribution";
 import { isApprovedStatus } from "@/lib/status";
+import { isSaleInRange } from "@/lib/date-range";
 
 export const Route = createFileRoute("/_app/campaigns")({
   head: () => ({ meta: [{ title: "Campanhas — AdsTracker" }] }),
@@ -69,6 +70,9 @@ interface SaleRow {
   utm_term: string | null;
   utm_campaign: string | null;
   src: string | null;
+  approved_at: string | null;
+  order_date: string | null;
+  created_at: string | null;
 }
 
 interface SalesAgg {
@@ -575,16 +579,23 @@ function CampaignsPage() {
   });
   const rate = fx.data?.rate ?? 5.2;
 
+  // Mesmo intervalo que o Meta usa pra puxar o gasto. Sem esse filtro a
+  // tabela contava o histórico inteiro de vendas — por isso "Hoje" mostrava
+  // 177 vendas enquanto o Dashboard mostrava 8 no mesmo período.
   const sales = useQuery({
-    queryKey: ["sales-all"],
+    queryKey: ["sales-all", preset],
     queryFn: async (): Promise<SaleRow[]> => {
       if (!supabase) return [];
       const { data: rows, error: e } = await supabase
         .from("sales")
-        .select("id,amount,net_amount,status,utm_term,utm_campaign,src")
+        .select(
+          "id,amount,net_amount,status,utm_term,utm_campaign,src,approved_at,order_date,created_at",
+        )
         .limit(10000);
       if (e) return [];
-      return (rows ?? []) as SaleRow[];
+      return ((rows ?? []) as SaleRow[]).filter((r) =>
+        isSaleInRange(r, pageRange),
+      );
     },
   });
 

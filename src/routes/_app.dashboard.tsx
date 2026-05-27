@@ -37,6 +37,7 @@ import {
   type DatePreset,
   type DateRange,
 } from "@/lib/facebook-api";
+import { isSaleInRange, rangeKey } from "@/lib/date-range";
 import { fetchUsdBrl } from "@/lib/currency";
 import { supabase } from "@/lib/supabase";
 import { isApprovedStatus, isRefundStatus } from "@/lib/status";
@@ -78,73 +79,6 @@ type SaleSummaryRow = {
   order_date: string | null;
   created_at: string | null;
 };
-
-function getSaleEventDate(sale: SaleSummaryRow) {
-  const rawDate = sale.approved_at ?? sale.order_date ?? sale.created_at;
-  if (!rawDate) return null;
-  const date = new Date(rawDate);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-// Resolve um DateRange (preset OU custom) em {start, end} no fuso local.
-// Usado pra filtrar as vendas do banco. O Meta lida com o mesmo intervalo via
-// `time_range` no servidor.
-function resolveRange(range: DateRange): { start: Date | null; end: Date } {
-  const now = new Date();
-  const startOfToday = new Date(now);
-  startOfToday.setHours(0, 0, 0, 0);
-  const endOfNow = new Date(now);
-
-  if (range.type === "custom") {
-    const start = new Date(`${range.since}T00:00:00`);
-    const end = new Date(`${range.until}T23:59:59`);
-    return { start, end };
-  }
-
-  switch (range.preset) {
-    case "today":
-      return { start: startOfToday, end: endOfNow };
-    case "yesterday": {
-      const start = new Date(startOfToday);
-      start.setDate(start.getDate() - 1);
-      const end = new Date(startOfToday);
-      end.setMilliseconds(-1);
-      return { start, end };
-    }
-    case "last_7d": {
-      const start = new Date(startOfToday);
-      start.setDate(start.getDate() - 6);
-      return { start, end: endOfNow };
-    }
-    case "last_30d": {
-      const start = new Date(startOfToday);
-      start.setDate(start.getDate() - 29);
-      return { start, end: endOfNow };
-    }
-    case "this_month": {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { start, end: endOfNow };
-    }
-    case "last_month": {
-      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const end = new Date(now.getFullYear(), now.getMonth(), 1);
-      end.setMilliseconds(-1);
-      return { start, end };
-    }
-    case "maximum":
-    default:
-      return { start: null, end: endOfNow };
-  }
-}
-
-function isSaleInRange(sale: SaleSummaryRow, range: DateRange) {
-  const d = getSaleEventDate(sale);
-  if (!d) return false;
-  const { start, end } = resolveRange(range);
-  if (start && d < start) return false;
-  if (d > end) return false;
-  return true;
-}
 
 function fmtIsoDate(d: Date): string {
   const y = d.getFullYear();
@@ -284,27 +218,25 @@ function DashboardPage() {
   });
   const rate = fx.data?.rate ?? 5.2;
 
-  // chave estável da query (DateRange é objeto, então serializamos)
-  const rangeKey =
-    range.type === "preset" ? range.preset : `custom:${range.since}:${range.until}`;
+  const rk = rangeKey(range);
 
   const summary = useQuery({
-    queryKey: ["fb-summary", rangeKey],
+    queryKey: ["fb-summary", rk],
     queryFn: () => fetchAccountInsights(range),
   });
 
   const ts = useQuery({
-    queryKey: ["fb-timeseries", rangeKey],
+    queryKey: ["fb-timeseries", rk],
     queryFn: () => fetchAccountTimeseries(range),
   });
 
   const top = useQuery({
-    queryKey: ["fb-campaigns-top", rangeKey],
+    queryKey: ["fb-campaigns-top", rk],
     queryFn: () => fetchCampaigns(range),
   });
 
   const sales = useQuery({
-    queryKey: ["sales-summary", rangeKey],
+    queryKey: ["sales-summary", rk],
     queryFn: async () => {
       if (!supabase)
         return {
