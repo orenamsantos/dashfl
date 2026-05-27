@@ -129,6 +129,36 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
           });
         }
 
+        // --- detecção de venda de TESTE da Ticto (ANTES do gate de token).
+        // O painel da Ticto envia um payload de teste com product_name fixo
+        // "Paki Guthrie" e/ou token "PAKI_GUTHRIE" quando o produtor aperta
+        // "Testar Webhook". Respondemos 200 OK sem gravar — é assim que a
+        // Ticto valida que o endpoint está respondendo. Verificamos antes
+        // do gate de token pra não devolver 401 em payloads documentados.
+        const productNameForCheck = String(
+          pick(payload, "item.product_name", "product.name", "product_name") ??
+            "",
+        )
+          .trim()
+          .toLowerCase();
+        const tokenForCheck =
+          (typeof payload?.token === "string" ? payload.token : "")
+            .trim()
+            .toUpperCase();
+        const isTestToken = tokenForCheck === "PAKI_GUTHRIE";
+        const isTestProduct = productNameForCheck === "paki guthrie";
+        if (isTestProduct || isTestToken) {
+          console.warn("[ticto] payload de teste ignorado", {
+            productName: productNameForCheck || null,
+            isTestToken,
+          });
+          return new Response(
+            JSON.stringify({ ok: true, ignored: "test_payload" }),
+            { headers: { "Content-Type": "application/json", ...CORS } },
+          );
+        }
+
+        // --- gate de token (vendas reais)
         const provided =
           (typeof payload?.token === "string" ? payload.token : undefined) ??
           url.searchParams.get("token") ??
