@@ -97,15 +97,18 @@ function parseReais(v: unknown): number {
 // em postbacks reais — aceitamos vários sinônimos pra não perder nenhum.
 function extraItems(payload: any): any[] {
   const out: any[] = [];
-  for (const key of ["bumps", "order_bumps", "items", "combos", "extra_items"]) {
+  // APENAS arrays de bump de verdade. NUNCA "items"/"combos"/"extra_items":
+  // a Ticto v2 coloca o PRODUTO PRINCIPAL dentro de `items[]`, então incluí-lo
+  // aqui fazia o item principal ser contado duas vezes (inflava bruto e líquido).
+  for (const key of ["bumps", "order_bumps"]) {
     const v = payload?.[key];
     if (Array.isArray(v)) out.push(...v);
   }
-  // Alguns webhooks aninham em order/transaction.
+  // Bumps às vezes vêm aninhados em order/transaction — só os arrays de bump.
   for (const key of ["order", "transaction"]) {
     const nested = payload?.[key];
     if (nested) {
-      for (const sub of ["bumps", "items", "extras"]) {
+      for (const sub of ["bumps", "order_bumps"]) {
         const v = nested?.[sub];
         if (Array.isArray(v)) out.push(...v);
       }
