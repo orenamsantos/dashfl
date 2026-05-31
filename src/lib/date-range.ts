@@ -55,9 +55,26 @@ export function resolveRange(range: DateRange): {
   }
 }
 
-// Conveniência: filtra um registro de venda pegando a data por ordem de
-// preferência (approved_at → order_date → created_at). Linhas sem data
-// nenhuma são descartadas — não tem como atribuí-las a um período.
+// Equivalente a COALESCE(approved_at, order_date, created_at) do Postgres.
+// `??` não cobre string vazia, então testamos truthiness explicitamente —
+// vendas importadas via CSV podem chegar com "" em vez de null nas datas.
+export function saleEventDate(sale: {
+  approved_at?: string | null;
+  order_date?: string | null;
+  created_at?: string | null;
+}): Date | null {
+  const raw =
+    (sale.approved_at && sale.approved_at.trim()) ||
+    (sale.order_date && sale.order_date.trim()) ||
+    (sale.created_at && sale.created_at.trim()) ||
+    null;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// Filtra um registro de venda pelo intervalo. Mesmo COALESCE acima — quem
+// não tem data nenhuma fica fora (não dá pra atribuir a um período).
 export function isSaleInRange(
   sale: {
     approved_at?: string | null;
@@ -66,10 +83,8 @@ export function isSaleInRange(
   },
   range: DateRange,
 ): boolean {
-  const raw = sale.approved_at ?? sale.order_date ?? sale.created_at;
-  if (!raw) return false;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return false;
+  const d = saleEventDate(sale);
+  if (!d) return false;
   const { start, end } = resolveRange(range);
   if (start && d < start) return false;
   if (d > end) return false;
