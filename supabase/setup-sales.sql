@@ -33,6 +33,10 @@ alter table public.sales add column if not exists src text;
 alter table public.sales add column if not exists sck text;
 alter table public.sales add column if not exists affiliate text;
 alter table public.sales add column if not exists raw jsonb;
+-- Chaves dos itens já mesclados nesta venda (transaction_hash + item/offer).
+-- Permite que postbacks subsequentes (ex.: bumps em postbacks separados)
+-- somem amount/net_amount sem duplicar em caso de retry da Ticto.
+alter table public.sales add column if not exists merged_items text[] not null default '{}';
 alter table public.sales add column if not exists created_at timestamptz not null default now();
 alter table public.sales add column if not exists updated_at timestamptz not null default now();
 

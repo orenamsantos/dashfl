@@ -103,6 +103,42 @@ function sumBumps(payload: any): number {
   return total;
 }
 
+// Comissão líquida dos bumps. A Ticto pode mandar o producer aninhado no
+// item do bump (centavos em producer.amount ou string em producer.cms) ou
+// um campo plano `cms`/`commission` em reais. Tentamos vários caminhos
+// porque a doc v2 não é 100% explícita sobre esse subobjeto.
+function sumBumpCommissions(payload: any): number {
+  const bumps = payload?.bumps;
+  if (!Array.isArray(bumps)) return 0;
+  let total = 0;
+  for (const b of bumps) {
+    const cents = b?.producer?.amount;
+    if (cents != null && String(cents).trim() !== "") {
+      total += Number(String(cents).replace(",", ".")) / 100;
+      continue;
+    }
+    const cms = b?.producer?.cms ?? b?.cms ?? b?.commission;
+    if (cms != null && String(cms).trim() !== "") {
+      total += parseReais(cms);
+    }
+  }
+  return total;
+}
+
+// Identificador estável do "item" que entrou neste postback. Usado pra
+// detectar retry idempotente (mesma chave -> noop) vs postback adicional
+// de bump (chave nova -> soma). Inclui status pra que pix_created e
+// authorized do mesmo item contem como eventos distintos no merge.
+function itemKeyFor(payload: any): string {
+  const product =
+    pick<string>(payload, "item.product_id", "item.product_name", "product.id", "product.name", "product_name") ??
+    "main";
+  const offer =
+    pick<string>(payload, "item.offer_id", "item.offer_name", "offer.id", "offer.name") ?? "";
+  const status = String(pick(payload, "status", "transaction.status") ?? "");
+  return `${product}|${offer}|${status}`;
+}
+
 // payment_method da Ticto v2 → label legível
 function mapPaymentMethod(raw: unknown): string | null {
   const v = clean(raw);
@@ -234,14 +270,16 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
         let net_amount: number | null = null;
         if (isApprovedStatus(status)) {
           const producerCents = pick(payload, "producer.amount");
+          let main = 0;
           if (producerCents != null && String(producerCents).trim() !== "") {
-            net_amount = centsToReais(producerCents);
+            main = centsToReais(producerCents);
           } else {
             const cms = pick(payload, "producer.cms");
             if (cms != null && String(cms).trim() !== "") {
-              net_amount = parseReais(cms);
+              main = parseReais(cms);
             }
           }
+          net_amount = main + sumBumpCommissions(payload);
         }
 
         // --- tracking (utms / src / sck) — "Não Informado" vira null
@@ -346,30 +384,104 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
           raw: payload,
         };
 
+        const itemKey = itemKeyFor(payload);
+
         try {
           const admin = getAdmin();
+          // SELECT-then-merge: se já existir uma venda com o mesmo
+          // transaction_hash, queremos somar (caso do bump em postback
+          // separado), preservando idempotência via merged_items.
+          const { data: existingRows, error: selErr } = await admin
+            .from("sales")
+            .select("id, amount, net_amount, status, merged_items")
+            .eq("id", row.id)
+            .limit(1);
+          if (selErr) {
+            return new Response(JSON.stringify({ error: selErr.message }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...CORS },
+            });
+          }
+          const existing = existingRows?.[0] as
+            | {
+                id: string;
+                amount: number | null;
+                net_amount: number | null;
+                status: string | null;
+                merged_items: string[] | null;
+              }
+            | undefined;
+
+          if (!existing) {
+            const insertRow = { ...row, merged_items: [itemKey] };
+            const { error } = await admin.from("sales").insert(insertRow);
+            if (error) {
+              return new Response(JSON.stringify({ error: error.message }), {
+                status: 500,
+                headers: { "Content-Type": "application/json", ...CORS },
+              });
+            }
+            return new Response(
+              JSON.stringify({ ok: true, id: row.id, action: "insert" }),
+              { headers: { "Content-Type": "application/json", ...CORS } },
+            );
+          }
+
+          const already = (existing.merged_items ?? []).includes(itemKey);
+          if (already) {
+            // Retry da Ticto: só atualiza campos não-monetários (status pode
+            // ter mudado em retry curto, mas amount/net já estão somados).
+            const { error } = await admin
+              .from("sales")
+              .update({
+                status: row.status,
+                approved_at: row.approved_at ?? undefined,
+                payment_method: row.payment_method ?? undefined,
+                raw: payload,
+              })
+              .eq("id", row.id);
+            if (error) {
+              return new Response(JSON.stringify({ error: error.message }), {
+                status: 500,
+                headers: { "Content-Type": "application/json", ...CORS },
+              });
+            }
+            return new Response(
+              JSON.stringify({ ok: true, id: row.id, action: "noop_duplicate" }),
+              { headers: { "Content-Type": "application/json", ...CORS } },
+            );
+          }
+
+          // Item novo (bump em postback separado, ou novo evento de status):
+          // SOMA amount/net_amount em cima do existente. Não sobrescreve.
+          const merged = {
+            amount: Number(existing.amount ?? 0) + row.amount,
+            net_amount:
+              row.net_amount != null
+                ? Number(existing.net_amount ?? 0) + row.net_amount
+                : existing.net_amount,
+            // status mais "avançado" ganha: Aprovada > Pendente
+            status:
+              row.status === "Aprovada" ? row.status : existing.status ?? row.status,
+            approved_at: row.approved_at ?? undefined,
+            payment_method: row.payment_method ?? undefined,
+            raw: payload,
+            merged_items: [...(existing.merged_items ?? []), itemKey],
+          };
           const { error } = await admin
             .from("sales")
-            .upsert(row, { onConflict: "id" });
+            .update(merged)
+            .eq("id", row.id);
           if (error) {
-            // retry without `raw` if the column doesn't exist
-            const { raw: _omit, ...rest } = row;
-            const retry = await admin
-              .from("sales")
-              .upsert(rest, { onConflict: "id" });
-            if (retry.error) {
-              return new Response(
-                JSON.stringify({ error: retry.error.message }),
-                {
-                  status: 500,
-                  headers: { "Content-Type": "application/json", ...CORS },
-                },
-              );
-            }
+            return new Response(JSON.stringify({ error: error.message }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...CORS },
+            });
           }
-          return new Response(JSON.stringify({ ok: true, id: row.id }), {
-            headers: { "Content-Type": "application/json", ...CORS },
-          });
+          return new Response(
+            JSON.stringify({ ok: true, id: row.id, action: "merge_sum" }),
+            { headers: { "Content-Type": "application/json", ...CORS } },
+          );
         } catch (e) {
           return new Response(
             JSON.stringify({ error: (e as Error).message }),
