@@ -16,6 +16,7 @@ import { Route as ApiFbRouteImport } from './routes/api/fb'
 import { Route as ApiBudgetRouteImport } from './routes/api/budget'
 import { Route as ApiFeesRouteImport } from './routes/api/fees'
 import { Route as ApiBackfillNetRouteImport } from './routes/api/backfill-net'
+import { Route as ApiBackfillDatesRouteImport } from './routes/api/backfill-dates'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
 import { Route as AppIntegrationsRouteImport } from './routes/_app.integrations'
@@ -59,6 +60,11 @@ const ApiFeesRoute = ApiFeesRouteImport.update({
 const ApiBackfillNetRoute = ApiBackfillNetRouteImport.update({
   id: '/api/backfill-net',
   path: '/api/backfill-net',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBackfillDatesRoute = ApiBackfillDatesRouteImport.update({
+  id: '/api/backfill-dates',
+  path: '/api/backfill-dates',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/api/budget': typeof ApiBudgetRoute
   '/api/fees': typeof ApiFeesRoute
   '/api/backfill-net': typeof ApiBackfillNetRoute
+  '/api/backfill-dates': typeof ApiBackfillDatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -143,6 +150,7 @@ export interface FileRoutesByTo {
   '/api/budget': typeof ApiBudgetRoute
   '/api/fees': typeof ApiFeesRoute
   '/api/backfill-net': typeof ApiBackfillNetRoute
+  '/api/backfill-dates': typeof ApiBackfillDatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/api/budget': typeof ApiBudgetRoute
   '/api/fees': typeof ApiFeesRoute
   '/api/backfill-net': typeof ApiBackfillNetRoute
+  '/api/backfill-dates': typeof ApiBackfillDatesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -183,6 +192,7 @@ export interface FileRouteTypes {
     | '/api/budget'
     | '/api/fees'
     | '/api/backfill-net'
+    | '/api/backfill-dates'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
     | '/api/budget'
     | '/api/fees'
     | '/api/backfill-net'
+    | '/api/backfill-dates'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/api/budget'
     | '/api/fees'
     | '/api/backfill-net'
+    | '/api/backfill-dates'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -234,6 +246,7 @@ export interface RootRouteChildren {
   ApiBudgetRoute: typeof ApiBudgetRoute
   ApiFeesRoute: typeof ApiFeesRoute
   ApiBackfillNetRoute: typeof ApiBackfillNetRoute
+  ApiBackfillDatesRoute: typeof ApiBackfillDatesRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
@@ -289,6 +302,13 @@ declare module '@tanstack/react-router' {
       path: '/api/backfill-net'
       fullPath: '/api/backfill-net'
       preLoaderRoute: typeof ApiBackfillNetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/backfill-dates': {
+      id: '/api/backfill-dates'
+      path: '/api/backfill-dates'
+      fullPath: '/api/backfill-dates'
+      preLoaderRoute: typeof ApiBackfillDatesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/settings': {
@@ -392,6 +412,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiBudgetRoute: ApiBudgetRoute,
   ApiFeesRoute: ApiFeesRoute,
   ApiBackfillNetRoute: ApiBackfillNetRoute,
+  ApiBackfillDatesRoute: ApiBackfillDatesRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,

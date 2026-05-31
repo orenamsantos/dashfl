@@ -103,8 +103,9 @@ function GeneralTab() {
           </Select>
         </div>
         <Button onClick={save}>Salvar</Button>
-        <div className="pt-4 border-t border-border">
+        <div className="pt-4 border-t border-border space-y-4">
           <ReprocessNetButton />
+          <ReprocessDatesButton />
         </div>
       </CardContent>
     </Card>
@@ -146,6 +147,47 @@ function ReprocessNetButton() {
           </>
         ) : (
           "Reprocessar líquido"
+        )}
+      </Button>
+    </div>
+  );
+}
+
+function ReprocessDatesButton() {
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/backfill-dates", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        throw new Error(json?.error ?? `HTTP ${res.status}`);
+      }
+      toast.success(
+        `Datas: ${json.updated} preenchidas, ${json.unchanged} sem alteração (${json.scanned} analisadas)`,
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-2">
+      <Label>Reprocessar datas das vendas</Label>
+      <p className="text-xs text-muted-foreground">
+        Preenche <code>order_date</code> e <code>approved_at</code> das vendas
+        que ficaram NULL. Usa o <code>raw</code> do webhook quando disponível;
+        caso contrário, cai pra <code>created_at</code> como aproximação.
+      </p>
+      <Button variant="outline" onClick={run} disabled={busy}>
+        {busy ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Reprocessando...
+          </>
+        ) : (
+          "Reprocessar datas"
         )}
       </Button>
     </div>

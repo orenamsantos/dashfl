@@ -15,6 +15,31 @@ function getAdmin() {
   return createClient(url, serviceKey, { auth: { persistSession: false } });
 }
 
+// Parser tolerante: aceita ISO (2024-05-31T...) ou BR ("31/05/2024 13:45:00").
+// Retorna ISO 8601 ou null. A coluna `order_date`/`approved_at` é timestamptz.
+function parseTictoDate(v: unknown): string | null {
+  const s = clean(v);
+  if (!s) return null;
+  // ISO direto
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  // BR: DD/MM/YYYY [HH:MM[:SS]]
+  const m = s.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/,
+  );
+  if (m) {
+    const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = m;
+    const iso = `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}-03:00`;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  // último recurso
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -262,23 +287,31 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
             "method",
           ),
         );
-        const order_date = clean(
+        // Ticto v2: `order.order_date` é a data do pedido; `status_date` é a
+        // data da última mudança de status — só conta como "aprovado em"
+        // quando o status atual é authorized. Mantemos fallbacks p/ payloads
+        // antigos / outras integrações.
+        const order_date = parseTictoDate(
           pick<string>(
             payload,
+            "order.order_date",
             "order.created_at",
             "transaction.created_at",
             "created_at",
           ),
         );
-        const approved_at = clean(
-          pick<string>(
-            payload,
-            "transaction.paid_at",
-            "order.paid_at",
-            "paid_at",
-            "approved_at",
-          ),
+        const statusDateRaw = pick<string>(
+          payload,
+          "status_date",
+          "order.status_date",
+          "transaction.paid_at",
+          "order.paid_at",
+          "paid_at",
+          "approved_at",
         );
+        const approved_at = isApprovedStatus(status)
+          ? parseTictoDate(statusDateRaw)
+          : null;
         const affiliate = clean(
           pick<string>(payload, "affiliate.name", "affiliate_name", "affiliate"),
         );
