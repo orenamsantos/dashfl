@@ -99,7 +99,19 @@ export const importSalesBatch = createServerFn({ method: "POST" })
       existing.sck = pickPreferredValue(existing.sck, row.sck);
       existing.affiliate = pickPreferredValue(existing.affiliate, row.affiliate);
     }
-    const rows = [...rowsById.values()];
+    // CSV é a fonte autoritativa: marcamos cada linha com __dashfl_source.
+    // O webhook da Ticto checa esse marcador e, quando presente, NÃO soma
+    // amount/net_amount por cima (só atualiza status/datas), evitando que um
+    // postback de bump tardio infle o valor já consolidado pelo CSV.
+    const rows = [...rowsById.values()].map(
+      (r): Record<string, unknown> => ({
+        ...r,
+        raw: {
+          ...((r.raw as Record<string, unknown>) ?? {}),
+          __dashfl_source: "csv",
+        },
+      }),
+    );
     if (rows.length === 0) {
       return {
         inserted: 0,

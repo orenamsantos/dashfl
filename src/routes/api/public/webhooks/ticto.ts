@@ -513,6 +513,41 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
             );
           }
 
+          // CSV é a fonte autoritativa de dinheiro. Se a linha foi gravada/
+          // sobrescrita por uma importação de CSV, NÃO somamos amount/net por
+          // cima (o CSV já consolidou produto + bumps). O webhook só atualiza
+          // status/datas/forma de pagamento em tempo real e mantém o lock.
+          const csvLocked = existing.raw?.__dashfl_source === "csv";
+          if (csvLocked) {
+            const nextRaw = {
+              ...(existing.raw ?? {}),
+              __dashfl_source: "csv",
+              __dashfl_last_webhook: payload,
+            };
+            const { error } = await admin
+              .from("sales")
+              .update({
+                status:
+                  row.status === "Aprovada"
+                    ? row.status
+                    : existing.status ?? row.status,
+                approved_at: row.approved_at ?? undefined,
+                payment_method: row.payment_method ?? undefined,
+                raw: nextRaw,
+              })
+              .eq("id", row.id);
+            if (error) {
+              return new Response(JSON.stringify({ error: error.message }), {
+                status: 500,
+                headers: { "Content-Type": "application/json", ...CORS },
+              });
+            }
+            return new Response(
+              JSON.stringify({ ok: true, id: row.id, action: "noop_csv_locked" }),
+              { headers: { "Content-Type": "application/json", ...CORS } },
+            );
+          }
+
           const already = existingMerged.includes(itemKey);
           if (already) {
             // Retry da Ticto: idempotente. Só atualiza campos não-monetários
