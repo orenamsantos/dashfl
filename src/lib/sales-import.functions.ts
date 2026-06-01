@@ -59,6 +59,10 @@ export const importSalesBatch = createServerFn({ method: "POST" })
       const id = typeof row.id === "string" ? row.id : null;
       if (!id) continue;
 
+      // `existing` aqui é o acumulador EM MEMÓRIA das linhas deste arquivo
+      // (não é o valor do banco). Somar produto + order bump do mesmo pedido
+      // é o comportamento correto; o total resultante depois SUBSTITUI a
+      // linha no banco via upsert (não soma com o que já está gravado).
       const existing = rowsById.get(id);
       if (!existing) {
         rowsById.set(id, row);
@@ -106,6 +110,9 @@ export const importSalesBatch = createServerFn({ method: "POST" })
     }
 
     const ids = rows.map((r) => String((r as { id: unknown }).id));
+    // Só lemos `id` para distinguir inserts de updates na contagem. NUNCA
+    // lemos amount/net_amount do banco: o valor consolidado do ARQUIVO é a
+    // fonte da verdade e SUBSTITUI o que está gravado (ver upsert abaixo).
     const { data: existing, error: selErr } = await client
       .from("sales")
       .select("id")
@@ -120,10 +127,14 @@ export const importSalesBatch = createServerFn({ method: "POST" })
     }
     const existingSet = new Set((existing ?? []).map((r: { id: string }) => r.id));
 
+    // ON CONFLICT (id) DO UPDATE SET col = EXCLUDED.col → cada coluna recebe o
+    // valor do arquivo (overwrite). amount/net_amount NÃO são somados com o
+    // que já existe no banco; uma reimportação do mesmo arquivo é idempotente.
+    // `ignoreDuplicates: false` é o padrão, mas explicitamos para que ninguém
+    // troque para `true` (que faria DO NOTHING e perderia atualizações).
     const { error: upErr } = await client
       .from("sales")
-      .upsert(rows, { onConflict: "id" });
-
+      .upsert(rows, { onConflict: "id", ignoreDuplicates: false });
 
     if (upErr) {
       // retry without `raw` column if it doesn't exist in schema
@@ -131,7 +142,9 @@ export const importSalesBatch = createServerFn({ method: "POST" })
         const { raw: _omit, ...rest } = r as Record<string, unknown>;
         return rest;
       });
-      const retry = await client.from("sales").upsert(stripped, { onConflict: "id" });
+      const retry = await client
+        .from("sales")
+        .upsert(stripped, { onConflict: "id", ignoreDuplicates: false });
       if (retry.error) {
         return {
           inserted: 0,
