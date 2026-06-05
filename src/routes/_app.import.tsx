@@ -20,6 +20,7 @@ interface RunSummary {
   read: number;
   inserted: number;
   updated: number;
+  dedup: number;
   failed: number;
   errors: { id: string | null; message: string }[];
   parseErrors: { line: number; message: string }[];
@@ -65,6 +66,7 @@ function ImportPage() {
       const total = consolidated.length;
       let inserted = 0;
       let updated = 0;
+      let dedup = 0;
       let failed = 0;
       const errors: { id: string | null; message: string }[] = [];
 
@@ -74,6 +76,7 @@ function ImportPage() {
           const res = await importBatch({ data: { rows: slice as never } });
           inserted += res.inserted;
           updated += res.updated;
+          dedup += res.dedup ?? 0;
           failed += res.failed;
           if (res.errors?.length) errors.push(...res.errors);
         } catch (e) {
@@ -87,6 +90,7 @@ function ImportPage() {
         read: total + parsed.errors.length,
         inserted,
         updated,
+        dedup,
         failed,
         errors,
         parseErrors: parsed.errors.map((e) => ({ line: e.line, message: e.message })),
@@ -200,10 +204,15 @@ function ImportPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
               <Stat label="Linhas lidas" value={summary.read} />
               <Stat label="Novas" value={summary.inserted} tone="success" />
               <Stat label="Atualizadas" value={summary.updated} />
+              <Stat
+                label="Duplicatas removidas"
+                value={summary.dedup}
+                tone={summary.dedup > 0 ? "success" : "muted"}
+              />
               <Stat
                 label="Erros"
                 value={summary.failed + summary.parseErrors.length}

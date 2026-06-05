@@ -40,7 +40,8 @@ export const importSalesBatch = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const client = getClient();
-    if (data.rows.length === 0) return { inserted: 0, updated: 0, failed: 0, errors: [] };
+    if (data.rows.length === 0)
+      return { inserted: 0, updated: 0, failed: 0, dedup: 0, errors: [] };
 
     // Garantir que external_id esteja preenchido (coluna NOT NULL na tabela sales)
     // e agrupar múltiplos itens do mesmo pedido/transação em uma única venda.
@@ -103,20 +104,31 @@ export const importSalesBatch = createServerFn({ method: "POST" })
     // O webhook da Ticto checa esse marcador e, quando presente, NÃO soma
     // amount/net_amount por cima (só atualiza status/datas), evitando que um
     // postback de bump tardio infle o valor já consolidado pelo CSV.
-    const rows = [...rowsById.values()].map(
-      (r): Record<string, unknown> => ({
-        ...r,
+    // order_code (Código do Pedido) é só pra dedup contra o webhook; NÃO é
+    // coluna da tabela, então sai do payload do upsert.
+    const orderCodes = [
+      ...new Set(
+        [...rowsById.values()]
+          .map((r) => (r.order_code ? String(r.order_code).trim() : ""))
+          .filter(Boolean),
+      ),
+    ];
+    const rows = [...rowsById.values()].map((r): Record<string, unknown> => {
+      const { order_code: _oc, ...rest } = r as Record<string, unknown>;
+      return {
+        ...rest,
         raw: {
-          ...((r.raw as Record<string, unknown>) ?? {}),
+          ...((rest.raw as Record<string, unknown>) ?? {}),
           __dashfl_source: "csv",
         },
-      }),
-    );
+      };
+    });
     if (rows.length === 0) {
       return {
         inserted: 0,
         updated: 0,
         failed: data.rows.length,
+        dedup: 0,
         errors: [{ id: null, message: "Nenhuma linha válida com ID foi enviada para importação." }],
       };
     }
@@ -134,6 +146,7 @@ export const importSalesBatch = createServerFn({ method: "POST" })
         inserted: 0,
         updated: 0,
         failed: data.rows.length,
+        dedup: 0,
         errors: [{ id: null, message: selErr.message }],
       };
     }
@@ -162,9 +175,28 @@ export const importSalesBatch = createServerFn({ method: "POST" })
           inserted: 0,
           updated: 0,
           failed: data.rows.length,
+          dedup: 0,
           errors: [{ id: null, message: retry.error.message }],
         };
       }
+    }
+
+    // DEDUP webhook×CSV: remove linhas-fantasma que o webhook gravou usando o
+    // id do PEDIDO (Código do Pedido, ex. TO...) em vez do id da TRANSAÇÃO
+    // (ex. TP..., que o CSV usa). Uma venda real nunca tem id no formato de
+    // pedido, então qualquer linha cujo id seja um order_code deste lote é a
+    // mesma venda gravada em dobro pelo webhook. Só apaga os que NÃO são um
+    // id de transação que acabamos de gravar.
+    let dedup = 0;
+    const importedIds = new Set(ids);
+    const orphanIds = orderCodes.filter((c) => !importedIds.has(c));
+    if (orphanIds.length > 0) {
+      const { data: removed } = await client
+        .from("sales")
+        .delete()
+        .in("id", orphanIds)
+        .select("id");
+      dedup = removed?.length ?? 0;
     }
 
     let inserted = 0;
@@ -173,5 +205,11 @@ export const importSalesBatch = createServerFn({ method: "POST" })
       if (existingSet.has(String((r as { id: unknown }).id))) updated++;
       else inserted++;
     }
-    return { inserted, updated, failed: 0, errors: [] as { id: string | null; message: string }[] };
+    return {
+      inserted,
+      updated,
+      failed: 0,
+      dedup,
+      errors: [] as { id: string | null; message: string }[],
+    };
   });

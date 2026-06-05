@@ -3,6 +3,10 @@ import { normalizeStatus } from "./status";
 
 export interface ParsedSale {
   id: string;
+  // "Código do Pedido" (hash do PEDIDO, ex. TOP...). NÃO é gravado como coluna;
+  // serve só pra dedup: se o webhook gravou a mesma venda usando o id do pedido
+  // em vez do id da transação, a importação remove essa linha-fantasma.
+  order_code: string | null;
   source: string;
   checkout: string;
   product: string | null;
@@ -160,6 +164,12 @@ export async function parseTictoCsv(file: File): Promise<ParseResult> {
 
       rows.push({
         id,
+        order_code: get(
+          "Código do Pedido",
+          "Codigo do Pedido",
+          "Número do Pedido",
+          "Numero do Pedido",
+        ),
         source: "Ticto",
         checkout: "Ticto",
         product: get("Nome do Produto", "Produto"),
@@ -219,6 +229,7 @@ export function consolidateByOrder(rows: ParsedSale[]): ParsedSale[] {
     existing.amount = (existing.amount ?? 0) + (row.amount ?? 0);
     existing.net_amount = (existing.net_amount ?? 0) + (row.net_amount ?? 0);
     // textos: mantém o que já existe; só preenche se estiver vazio
+    existing.order_code = existing.order_code || row.order_code;
     existing.product = existing.product || row.product;
     existing.product_name = existing.product_name || row.product_name;
     existing.offer = existing.offer || row.offer;
