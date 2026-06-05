@@ -156,11 +156,54 @@ function GeneralTab() {
         </div>
         <Button onClick={save}>Salvar</Button>
         <div className="pt-4 border-t border-border space-y-4">
+          <ReprocessGrossButton />
           <ReprocessNetButton />
           <ReprocessDatesButton />
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ReprocessGrossButton() {
+  const [busy, setBusy] = useState(false);
+  async function run() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/backfill-gross", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        throw new Error(json?.error ?? `HTTP ${res.status}`);
+      }
+      toast.success(
+        `Bruto reprocessado: ${json.updated} corrigidas, ${json.skipped} ignoradas (${json.scanned} analisadas)`,
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-2">
+      <Label>Reprocessar faturamento bruto das vendas</Label>
+      <p className="text-xs text-muted-foreground">
+        Recalcula <code>amount</code> (item + bumps) a partir do payload do
+        webhook salvo. Corrige vendas que ficaram infladas pelo bug antigo de
+        mudança de status. Não toca em vendas importadas por CSV nem zera valor
+        válido. Seguro rodar várias vezes.
+      </p>
+      <Button variant="outline" onClick={run} disabled={busy}>
+        {busy ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Reprocessando...
+          </>
+        ) : (
+          "Reprocessar bruto"
+        )}
+      </Button>
+    </div>
   );
 }
 

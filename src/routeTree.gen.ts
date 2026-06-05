@@ -9,13 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as LoginRouteImport } from './routes/login'
+import { Route as ApiFeesRouteImport } from './routes/api/fees'
 import { Route as ApiFbRouteImport } from './routes/api/fb'
 import { Route as ApiBudgetRouteImport } from './routes/api/budget'
-import { Route as ApiFeesRouteImport } from './routes/api/fees'
 import { Route as ApiBackfillNetRouteImport } from './routes/api/backfill-net'
+import { Route as ApiBackfillGrossRouteImport } from './routes/api/backfill-gross'
 import { Route as ApiBackfillDatesRouteImport } from './routes/api/backfill-dates'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppSalesRouteImport } from './routes/_app.sales'
@@ -23,11 +24,16 @@ import { Route as AppIntegrationsRouteImport } from './routes/_app.integrations'
 import { Route as AppImportRouteImport } from './routes/_app.import'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCampaignsRouteImport } from './routes/_app.campaigns'
-import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
-import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth/logout'
 import { Route as ApiAuthMeRouteImport } from './routes/api/auth/me'
+import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth/logout'
+import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
 import { Route as ApiPublicWebhooksTictoRouteImport } from './routes/api/public/webhooks/ticto'
 
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
@@ -37,9 +43,9 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const ApiFeesRoute = ApiFeesRouteImport.update({
+  id: '/api/fees',
+  path: '/api/fees',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiFbRoute = ApiFbRouteImport.update({
@@ -52,14 +58,14 @@ const ApiBudgetRoute = ApiBudgetRouteImport.update({
   path: '/api/budget',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiFeesRoute = ApiFeesRouteImport.update({
-  id: '/api/fees',
-  path: '/api/fees',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiBackfillNetRoute = ApiBackfillNetRouteImport.update({
   id: '/api/backfill-net',
   path: '/api/backfill-net',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBackfillGrossRoute = ApiBackfillGrossRouteImport.update({
+  id: '/api/backfill-gross',
+  path: '/api/backfill-gross',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiBackfillDatesRoute = ApiBackfillDatesRouteImport.update({
@@ -97,9 +103,9 @@ const AppCampaignsRoute = AppCampaignsRouteImport.update({
   path: '/campaigns',
   getParentRoute: () => AppRoute,
 } as any)
-const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
-  id: '/api/auth/login',
-  path: '/api/auth/login',
+const ApiAuthMeRoute = ApiAuthMeRouteImport.update({
+  id: '/api/auth/me',
+  path: '/api/auth/me',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
@@ -107,9 +113,9 @@ const ApiAuthLogoutRoute = ApiAuthLogoutRouteImport.update({
   path: '/api/auth/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthMeRoute = ApiAuthMeRouteImport.update({
-  id: '/api/auth/me',
-  path: '/api/auth/me',
+const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
+  id: '/api/auth/login',
+  path: '/api/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicWebhooksTictoRoute = ApiPublicWebhooksTictoRouteImport.update({
@@ -127,11 +133,12 @@ export interface FileRoutesByFullPath {
   '/integrations': typeof AppIntegrationsRoute
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
-  '/api/fb': typeof ApiFbRoute
-  '/api/budget': typeof ApiBudgetRoute
-  '/api/fees': typeof ApiFeesRoute
-  '/api/backfill-net': typeof ApiBackfillNetRoute
   '/api/backfill-dates': typeof ApiBackfillDatesRoute
+  '/api/backfill-gross': typeof ApiBackfillGrossRoute
+  '/api/backfill-net': typeof ApiBackfillNetRoute
+  '/api/budget': typeof ApiBudgetRoute
+  '/api/fb': typeof ApiFbRoute
+  '/api/fees': typeof ApiFeesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -146,11 +153,12 @@ export interface FileRoutesByTo {
   '/integrations': typeof AppIntegrationsRoute
   '/sales': typeof AppSalesRoute
   '/settings': typeof AppSettingsRoute
-  '/api/fb': typeof ApiFbRoute
-  '/api/budget': typeof ApiBudgetRoute
-  '/api/fees': typeof ApiFeesRoute
-  '/api/backfill-net': typeof ApiBackfillNetRoute
   '/api/backfill-dates': typeof ApiBackfillDatesRoute
+  '/api/backfill-gross': typeof ApiBackfillGrossRoute
+  '/api/backfill-net': typeof ApiBackfillNetRoute
+  '/api/budget': typeof ApiBudgetRoute
+  '/api/fb': typeof ApiFbRoute
+  '/api/fees': typeof ApiFeesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -159,19 +167,20 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
   '/_app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
   '/_app/campaigns': typeof AppCampaignsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/import': typeof AppImportRoute
   '/_app/integrations': typeof AppIntegrationsRoute
   '/_app/sales': typeof AppSalesRoute
   '/_app/settings': typeof AppSettingsRoute
-  '/api/fb': typeof ApiFbRoute
-  '/api/budget': typeof ApiBudgetRoute
-  '/api/fees': typeof ApiFeesRoute
-  '/api/backfill-net': typeof ApiBackfillNetRoute
   '/api/backfill-dates': typeof ApiBackfillDatesRoute
+  '/api/backfill-gross': typeof ApiBackfillGrossRoute
+  '/api/backfill-net': typeof ApiBackfillNetRoute
+  '/api/budget': typeof ApiBudgetRoute
+  '/api/fb': typeof ApiFbRoute
+  '/api/fees': typeof ApiFeesRoute
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/logout': typeof ApiAuthLogoutRoute
   '/api/auth/me': typeof ApiAuthMeRoute
@@ -188,11 +197,12 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/sales'
     | '/settings'
-    | '/api/fb'
-    | '/api/budget'
-    | '/api/fees'
-    | '/api/backfill-net'
     | '/api/backfill-dates'
+    | '/api/backfill-gross'
+    | '/api/backfill-net'
+    | '/api/budget'
+    | '/api/fb'
+    | '/api/fees'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -207,11 +217,12 @@ export interface FileRouteTypes {
     | '/integrations'
     | '/sales'
     | '/settings'
-    | '/api/fb'
-    | '/api/budget'
-    | '/api/fees'
-    | '/api/backfill-net'
     | '/api/backfill-dates'
+    | '/api/backfill-gross'
+    | '/api/backfill-net'
+    | '/api/budget'
+    | '/api/fb'
+    | '/api/fees'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -219,19 +230,20 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/login'
     | '/_app'
+    | '/login'
     | '/_app/campaigns'
     | '/_app/dashboard'
     | '/_app/import'
     | '/_app/integrations'
     | '/_app/sales'
     | '/_app/settings'
-    | '/api/fb'
-    | '/api/budget'
-    | '/api/fees'
-    | '/api/backfill-net'
     | '/api/backfill-dates'
+    | '/api/backfill-gross'
+    | '/api/backfill-net'
+    | '/api/budget'
+    | '/api/fb'
+    | '/api/fees'
     | '/api/auth/login'
     | '/api/auth/logout'
     | '/api/auth/me'
@@ -240,13 +252,14 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  LoginRoute: typeof LoginRoute
   AppRoute: typeof AppRouteWithChildren
-  ApiFbRoute: typeof ApiFbRoute
-  ApiBudgetRoute: typeof ApiBudgetRoute
-  ApiFeesRoute: typeof ApiFeesRoute
-  ApiBackfillNetRoute: typeof ApiBackfillNetRoute
+  LoginRoute: typeof LoginRoute
   ApiBackfillDatesRoute: typeof ApiBackfillDatesRoute
+  ApiBackfillGrossRoute: typeof ApiBackfillGrossRoute
+  ApiBackfillNetRoute: typeof ApiBackfillNetRoute
+  ApiBudgetRoute: typeof ApiBudgetRoute
+  ApiFbRoute: typeof ApiFbRoute
+  ApiFeesRoute: typeof ApiFeesRoute
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthLogoutRoute: typeof ApiAuthLogoutRoute
   ApiAuthMeRoute: typeof ApiAuthMeRoute
@@ -255,6 +268,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app': {
       id: '/_app'
       path: ''
@@ -269,11 +289,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/api/fees': {
+      id: '/api/fees'
+      path: '/api/fees'
+      fullPath: '/api/fees'
+      preLoaderRoute: typeof ApiFeesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/fb': {
@@ -290,18 +310,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBudgetRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/fees': {
-      id: '/api/fees'
-      path: '/api/fees'
-      fullPath: '/api/fees'
-      preLoaderRoute: typeof ApiFeesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/backfill-net': {
       id: '/api/backfill-net'
       path: '/api/backfill-net'
       fullPath: '/api/backfill-net'
       preLoaderRoute: typeof ApiBackfillNetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/backfill-gross': {
+      id: '/api/backfill-gross'
+      path: '/api/backfill-gross'
+      fullPath: '/api/backfill-gross'
+      preLoaderRoute: typeof ApiBackfillGrossRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/backfill-dates': {
@@ -353,11 +373,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCampaignsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/api/auth/login': {
-      id: '/api/auth/login'
-      path: '/api/auth/login'
-      fullPath: '/api/auth/login'
-      preLoaderRoute: typeof ApiAuthLoginRouteImport
+    '/api/auth/me': {
+      id: '/api/auth/me'
+      path: '/api/auth/me'
+      fullPath: '/api/auth/me'
+      preLoaderRoute: typeof ApiAuthMeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/logout': {
@@ -367,11 +387,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthLogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth/me': {
-      id: '/api/auth/me'
-      path: '/api/auth/me'
-      fullPath: '/api/auth/me'
-      preLoaderRoute: typeof ApiAuthMeRouteImport
+    '/api/auth/login': {
+      id: '/api/auth/login'
+      path: '/api/auth/login'
+      fullPath: '/api/auth/login'
+      preLoaderRoute: typeof ApiAuthLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/webhooks/ticto': {
@@ -406,13 +426,14 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  LoginRoute: LoginRoute,
   AppRoute: AppRouteWithChildren,
-  ApiFbRoute: ApiFbRoute,
-  ApiBudgetRoute: ApiBudgetRoute,
-  ApiFeesRoute: ApiFeesRoute,
-  ApiBackfillNetRoute: ApiBackfillNetRoute,
+  LoginRoute: LoginRoute,
   ApiBackfillDatesRoute: ApiBackfillDatesRoute,
+  ApiBackfillGrossRoute: ApiBackfillGrossRoute,
+  ApiBackfillNetRoute: ApiBackfillNetRoute,
+  ApiBudgetRoute: ApiBudgetRoute,
+  ApiFbRoute: ApiFbRoute,
+  ApiFeesRoute: ApiFeesRoute,
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthLogoutRoute: ApiAuthLogoutRoute,
   ApiAuthMeRoute: ApiAuthMeRoute,
