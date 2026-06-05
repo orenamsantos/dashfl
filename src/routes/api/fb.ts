@@ -132,10 +132,23 @@ export const Route = createFileRoute("/api/fb")({
         const { token, accountId } = getCreds();
 
         // Status never exposes the token — only whether it's configured.
+        // Também devolve o fuso da conta de anúncios (timezone_name): é ele que
+        // a Meta usa pra fechar o dia do gasto. Se for diferente de SP, "hoje"/
+        // "ontem" do gasto e das vendas não batem.
         if (resource === "status") {
+          let timezone: string | null = null;
+          if (token && accountId) {
+            try {
+              const j = await graph(`/${accountId}?fields=timezone_name`, token);
+              timezone = j?.timezone_name ?? null;
+            } catch {
+              timezone = null;
+            }
+          }
           return jsonResponse({
             configured: Boolean(token && accountId),
             accountId: accountId ?? null,
+            timezone,
           });
         }
 

@@ -88,6 +88,7 @@ async function fb<T>(params: Record<string, string>): Promise<T> {
 export async function fetchFBStatus(): Promise<{
   configured: boolean;
   accountId: string | null;
+  timezone?: string | null;
 }> {
   return fb({ resource: "status" });
 }

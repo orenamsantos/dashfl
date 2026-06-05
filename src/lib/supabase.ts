@@ -17,6 +17,8 @@ export type SettingKey =
   | "app_name"
   | "timezone"
   | "currency"
+  | "fx_mode"
+  | "fx_manual_rate"
   | "last_fb_sync";
 
 const memoryStore = new Map<string, string>();

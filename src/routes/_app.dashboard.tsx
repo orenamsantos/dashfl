@@ -37,9 +37,9 @@ import {
   type DatePreset,
   type DateRange,
 } from "@/lib/facebook-api";
-import { isSaleInRange, rangeKey } from "@/lib/date-range";
-import { fetchUsdBrl } from "@/lib/currency";
-import { supabase } from "@/lib/supabase";
+import { isSaleInRange, rangeKey, resolveRangeYmd } from "@/lib/date-range";
+import { fetchUsdBrl, effectiveRate, type FxMode } from "@/lib/currency";
+import { supabase, getSetting } from "@/lib/supabase";
 import { isApprovedStatus, isRefundStatus } from "@/lib/status";
 import {
   Table,
@@ -216,23 +216,49 @@ function DashboardPage() {
     queryFn: fetchUsdBrl,
     staleTime: 1000 * 60 * 60, // 1h
   });
-  const rate = fx.data?.rate ?? 5.2;
+  // Config do dólar definida pelo Flavio (Configurações > Geral).
+  const fxSettings = useQuery({
+    queryKey: ["fx-settings"],
+    queryFn: async () => ({
+      mode: ((await getSetting("fx_mode")) as FxMode | null) ?? "auto",
+      manual: Number((await getSetting("fx_manual_rate")) ?? "") || null,
+    }),
+    staleTime: 1000 * 60 * 5,
+  });
+  const eff = effectiveRate({
+    mode: fxSettings.data?.mode,
+    manualRate: fxSettings.data?.manual,
+    liveRate: fx.data?.rate,
+    liveSource: fx.data?.source,
+  });
+  const rate = eff.rate;
+
+  // O gasto da Meta usa as MESMAS datas (resolvidas no fuso de SP) que o filtro
+  // de vendas, pra gasto e receita baterem no mesmo período. Sem isso, "hoje"/
+  // "ontem" misturam o dia da conta (fuso USD) com o dia das vendas (SP).
+  const fbRange: DateRange = useMemo(() => {
+    if (range.type === "custom") return range;
+    const { startYmd, endYmd } = resolveRangeYmd(range);
+    if (!startYmd) return range; // "maximum": mantém o preset (sem piso)
+    return { type: "custom", since: startYmd, until: endYmd };
+  }, [range]);
 
   const rk = rangeKey(range);
+  const fbRk = rangeKey(fbRange);
 
   const summary = useQuery({
-    queryKey: ["fb-summary", rk],
-    queryFn: () => fetchAccountInsights(range),
+    queryKey: ["fb-summary", fbRk],
+    queryFn: () => fetchAccountInsights(fbRange),
   });
 
   const ts = useQuery({
-    queryKey: ["fb-timeseries", rk],
-    queryFn: () => fetchAccountTimeseries(range),
+    queryKey: ["fb-timeseries", fbRk],
+    queryFn: () => fetchAccountTimeseries(fbRange),
   });
 
   const top = useQuery({
-    queryKey: ["fb-campaigns-top", rk],
-    queryFn: () => fetchCampaigns(range),
+    queryKey: ["fb-campaigns-top", fbRk],
+    queryFn: () => fetchCampaigns(fbRange),
   });
 
   const sales = useQuery({
@@ -313,12 +339,14 @@ function DashboardPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             Métricas ao vivo do Facebook Ads + vendas.
-            {fx.data ? (
-              <span className="ml-2">
-                USD→BRL: <strong>{rate.toFixed(4)}</strong>
-                {fx.data.source === "fallback" && " (fallback)"}
-              </span>
-            ) : null}
+            <span className="ml-2">
+              USD→BRL: <strong>{rate.toFixed(4)}</strong>{" "}
+              {eff.source === "manual"
+                ? "(manual)"
+                : eff.source === "fallback"
+                  ? "(fallback)"
+                  : "(ao vivo)"}
+            </span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

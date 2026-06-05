@@ -43,6 +43,7 @@ import {
 import { Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getSetting, setSetting } from "@/lib/supabase";
+import { fetchUsdBrl } from "@/lib/currency";
 import { addFee, deleteFee, listFees } from "@/lib/fees";
 import type { Fee } from "@/types";
 
@@ -55,12 +56,20 @@ function GeneralTab() {
   const [name, setName] = useState("AdsTracker");
   const [tz, setTz] = useState("America/Sao_Paulo");
   const [currency, setCurrency] = useState("BRL");
+  const [fxMode, setFxMode] = useState<"auto" | "manual">("auto");
+  const [fxManual, setFxManual] = useState("");
+  const [liveRate, setLiveRate] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
       setName((await getSetting("app_name")) ?? "AdsTracker");
       setTz((await getSetting("timezone")) ?? "America/Sao_Paulo");
       setCurrency((await getSetting("currency")) ?? "BRL");
+      setFxMode(((await getSetting("fx_mode")) as "auto" | "manual") ?? "auto");
+      setFxManual((await getSetting("fx_manual_rate")) ?? "");
+      fetchUsdBrl()
+        .then((r) => setLiveRate(r.rate))
+        .catch(() => setLiveRate(null));
     })();
   }, []);
 
@@ -68,6 +77,11 @@ function GeneralTab() {
     await setSetting("app_name", name);
     await setSetting("timezone", tz);
     await setSetting("currency", currency);
+    await setSetting("fx_mode", fxMode);
+    await setSetting(
+      "fx_manual_rate",
+      fxManual.trim() ? String(Number(fxManual.replace(",", "."))) : null,
+    );
     toast.success("Configurações salvas");
   }
 
@@ -101,6 +115,44 @@ function GeneralTab() {
               <SelectItem value="EUR">EUR — Euro</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div className="space-y-2 pt-4 border-t border-border">
+          <Label>Cotação do dólar (USD→BRL)</Label>
+          <p className="text-xs text-muted-foreground">
+            Sua conta de anúncios é em dólar e você vende em real. Esta cotação
+            converte o gasto pra BRL no ROI/ROAS. Use "Manual" pra cravar o
+            dólar do dia e bater com o seu câmbio real.
+          </p>
+          <Select
+            value={fxMode}
+            onValueChange={(v) => setFxMode(v as "auto" | "manual")}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Automático (cotação ao vivo)</SelectItem>
+              <SelectItem value="manual">
+                Manual (eu defino o dólar do dia)
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          {fxMode === "manual" && (
+            <Input
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              placeholder="ex.: 5.45"
+              value={fxManual}
+              onChange={(e) => setFxManual(e.target.value)}
+            />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Cotação ao vivo agora:{" "}
+            {liveRate != null ? (
+              <strong>R$ {liveRate.toFixed(4)}</strong>
+            ) : (
+              "carregando..."
+            )}
+          </p>
         </div>
         <Button onClick={save}>Salvar</Button>
         <div className="pt-4 border-t border-border space-y-4">
@@ -198,6 +250,7 @@ function FacebookTab() {
   const [status, setStatus] = useState<{
     configured: boolean;
     accountId: string | null;
+    timezone?: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -216,14 +269,33 @@ function FacebookTab() {
           trocar o token, atualize o secret no Cloudflare.
         </p>
         {status?.configured ? (
-          <div>
-            <span className="text-muted-foreground">Status:</span>{" "}
-            <span className="font-medium text-[var(--color-success)]">
-              Conectado
-            </span>{" "}
-            <span className="text-muted-foreground">
-              — conta {status.accountId}
-            </span>
+          <div className="space-y-1">
+            <div>
+              <span className="text-muted-foreground">Status:</span>{" "}
+              <span className="font-medium text-[var(--color-success)]">
+                Conectado
+              </span>{" "}
+              <span className="text-muted-foreground">
+                — conta {status.accountId}
+              </span>
+            </div>
+            {status.timezone && (
+              <div className="text-xs">
+                <span className="text-muted-foreground">
+                  Fuso da conta de anúncios:
+                </span>{" "}
+                <strong>{status.timezone}</strong>
+                {status.timezone !== "America/Sao_Paulo" && (
+                  <span className="text-destructive">
+                    {" "}
+                    — diferente de SP. O gasto fecha o dia nesse fuso; em
+                    períodos curtos (hoje/ontem) pode não bater 100% com as
+                    vendas. Considere alinhar o fuso da conta no Gerenciador de
+                    Negócios.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div>
