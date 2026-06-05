@@ -180,18 +180,19 @@ function sumBumpCommissions(payload: any): number {
   return total;
 }
 
-// Identificador estável do "item" que entrou neste postback. Usado pra
-// detectar retry idempotente (mesma chave -> noop) vs postback adicional
-// de bump (chave nova -> soma). Inclui status pra que pix_created e
-// authorized do mesmo item contem como eventos distintos no merge.
+// Identificador estável do "item" (produto+oferta) deste postback. Usado pra
+// detectar retry/mudança de status do MESMO item (mesma chave -> NÃO soma) vs
+// postback de um item adicional/bump (chave nova -> soma).
+// IMPORTANTE: NÃO inclui status. Incluir status fazia pix_created e authorized
+// do mesmo item virarem chaves diferentes -> o authorized somava o valor de
+// novo -> faturamento bruto inflado e sem bater com o líquido.
 function itemKeyFor(payload: any): string {
   const product =
     pick<string>(payload, "item.product_id", "item.product_name", "product.id", "product.name", "product_name") ??
     "main";
   const offer =
     pick<string>(payload, "item.offer_id", "item.offer_name", "offer.id", "offer.name") ?? "";
-  const status = String(pick(payload, "status", "transaction.status") ?? "");
-  return `${product}|${offer}|${status}`;
+  return `${product}|${offer}`;
 }
 
 // payment_method da Ticto v2 → label legível
@@ -550,18 +551,25 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
 
           const already = existingMerged.includes(itemKey);
           if (already) {
-            // Retry da Ticto: idempotente. Só atualiza campos não-monetários
-            // (status pode ter mudado, mas amount/net já contabilizados).
+            // MESMO item já contabilizado. NÃO soma de novo (era isso que
+            // inflava quando o status mudava, ex. pix_created -> authorized).
+            // Atualiza status/datas; e quando o item passa a APROVADO, grava o
+            // bruto e o líquido AUTORITATIVOS deste evento (overwrite, sem somar)
+            // — assim o líquido (que só existe no authorized) entra e o bruto
+            // reflete item + bumps consolidados.
             const nextRaw = { ...payload, __dashfl_merged_items: existingMerged };
-            const { error } = await admin
-              .from("sales")
-              .update({
-                status: row.status,
-                approved_at: row.approved_at ?? undefined,
-                payment_method: row.payment_method ?? undefined,
-                raw: nextRaw,
-              })
-              .eq("id", row.id);
+            const update: Record<string, unknown> = {
+              status:
+                row.status === "Aprovada" ? row.status : existing.status ?? row.status,
+              approved_at: row.approved_at ?? undefined,
+              payment_method: row.payment_method ?? undefined,
+              raw: nextRaw,
+            };
+            if (isApprovedStatus(row.status)) {
+              update.amount = row.amount;
+              if (row.net_amount != null) update.net_amount = row.net_amount;
+            }
+            const { error } = await admin.from("sales").update(update).eq("id", row.id);
             if (error) {
               return new Response(JSON.stringify({ error: error.message }), {
                 status: 500,
@@ -569,7 +577,7 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
               });
             }
             return new Response(
-              JSON.stringify({ ok: true, id: row.id, action: "noop_duplicate" }),
+              JSON.stringify({ ok: true, id: row.id, action: "update_same_item" }),
               { headers: { "Content-Type": "application/json", ...CORS } },
             );
           }
