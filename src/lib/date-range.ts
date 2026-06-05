@@ -117,3 +117,22 @@ export function presetToRange(preset: DatePreset): DateRange {
 export function todayYmdSp(): string {
   return ymdInTz(new Date());
 }
+
+// Dia (YYYY-MM-DD) de um instante no fuso de SP. Usado pra agrupar vendas
+// por dia no gráfico e nos sparklines.
+export function ymdSp(d: Date): string {
+  return ymdInTz(d);
+}
+
+// Período imediatamente anterior, do MESMO tamanho, pra comparar Δ%.
+// "maximum" (sem piso) retorna null.
+export function previousRange(range: DateRange): DateRange | null {
+  const { startYmd, endYmd } = resolveRangeYmd(range);
+  if (!startYmd) return null;
+  const start = new Date(`${startYmd}T00:00:00Z`);
+  const end = new Date(`${endYmd}T00:00:00Z`);
+  const lenDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+  const prevEnd = addDaysYmd(startYmd, -1);
+  const prevStart = addDaysYmd(prevEnd, -(lenDays - 1));
+  return { type: "custom", since: prevStart, until: prevEnd };
+}
