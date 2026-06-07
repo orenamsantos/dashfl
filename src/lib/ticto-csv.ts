@@ -162,6 +162,13 @@ export async function parseTictoCsv(file: File): Promise<ParseResult> {
         return;
       }
 
+      // Pula vendas de TESTE (ex.: oferta "GTM TEST") — não são faturamento real.
+      const _offerName = get("Nome da Oferta", "Oferta") ?? "";
+      const _productName = get("Nome do Produto", "Produto") ?? "";
+      if (/\btest\b/i.test(_offerName) || /\btest\b/i.test(_productName)) {
+        return;
+      }
+
       rows.push({
         id,
         order_code: get(
@@ -175,11 +182,11 @@ export async function parseTictoCsv(file: File): Promise<ParseResult> {
         product: get("Nome do Produto", "Produto"),
         product_name: get("Nome do Produto", "Produto"),
         offer: get("Nome da Oferta", "Oferta"),
-        // BRUTO: "Valor do Item" é o preço do produto. "Valor Pago" às vezes
-        // inclui a taxa paga pelo comprador (infla o faturamento). Se preferir
-        // "o que caiu na conta", troque a ordem para ("Valor Pago", ...).
+        // BRUTO = o que o cliente DE FATO pagou ("Valor Pago"). "Valor do Item"
+        // é o preço de tabela: em cupom/desconto/teste (item R$ 37, pago R$ 3,70)
+        // ele inflava o faturamento e descolava do líquido. Fallbacks só se faltar.
         amount: parseBrlMoney(
-          get("Valor do Item", "Valor Pago", "Valor do Pedido", "Valor"),
+          get("Valor Pago", "Valor do Pedido", "Valor do Item", "Valor"),
         ),
         // LÍQUIDO: "Comissão do Produtor" é o líquido real da venda.
         // "Valor Liquidado" fica R$ 0 durante a retenção da Ticto, então só
