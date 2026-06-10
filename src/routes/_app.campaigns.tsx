@@ -143,16 +143,73 @@ function StatusBadge({ s }: { s: FBCampaign["status"] }) {
   return <Badge variant="secondary">{s === "PAUSED" ? "Pausado" : s}</Badge>;
 }
 
-// Métricas do Meta (gasto em BRL via rate) + métricas de cruzamento com Ticto.
-// `agg` pode ser undefined quando não há venda atribuída — mostra "—" nos campos.
+// Duas lentes pra não despejar 16 colunas de uma vez: "resultado" (decisão de
+// escalar/matar: dinheiro) e "entrega" (diagnóstico de mídia). O cabeçalho e as
+// células são dirigidos pela MESMA lista de colunas, então nunca desalinham.
+type View = "resultado" | "entrega";
+
+interface MetricCol {
+  key: SortKey | null; // null = não ordenável (ex.: Freq.)
+  label: string;
+}
+
+const RESULT_COLS: MetricCol[] = [
+  { key: "spend", label: "Gasto" },
+  { key: "revenue", label: "Faturamento" },
+  { key: "sales", label: "Vendas" },
+  { key: "roas", label: "ROAS" },
+  { key: "cpa", label: "CPA" },
+  { key: "profit", label: "Lucro" },
+];
+
+const DELIVERY_COLS: MetricCol[] = [
+  { key: "spend", label: "Gasto" },
+  { key: "impressions", label: "Impressões" },
+  { key: "reach", label: "Alcance" },
+  { key: null, label: "Freq." },
+  { key: "clicks", label: "Cliques" },
+  { key: "ctr", label: "CTR" },
+  { key: "cpc", label: "CPC" },
+  { key: "cpm", label: "CPM" },
+];
+
+function colsFor(view: View): MetricCol[] {
+  return view === "resultado" ? RESULT_COLS : DELIVERY_COLS;
+}
+// total de colunas da tabela = Nome(2) + Status(1) + métricas da lente
+function totalColsFor(view: View): number {
+  return 3 + colsFor(view).length;
+}
+
+function RoasChip({ roas }: { roas: number }) {
+  const good = roas >= 1.1;
+  return (
+    <span
+      className="inline-block rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums"
+      style={{
+        background: good
+          ? "oklch(0.8 0.17 152 / 0.14)"
+          : "oklch(0.645 0.205 18 / 0.14)",
+        color: good ? "var(--color-success)" : "var(--color-destructive)",
+      }}
+    >
+      {roas.toFixed(2)}x
+    </span>
+  );
+}
+
+// Métricas do Meta (gasto em BRL via rate) + cruzamento com Ticto, por lente.
+// `agg` pode ser undefined quando não há venda atribuída — mostra "—".
 function MetricsCells({
   m,
   rate,
   agg,
+  view,
 }: {
   m: FBInsight;
   rate: number;
   agg?: SalesAgg;
+  view: View;
 }) {
   const spendBrl = m.spend * rate;
   const cpc = m.clicks > 0 ? spendBrl / m.clicks : 0;
@@ -162,39 +219,35 @@ function MetricsCells({
   const roas = spendBrl > 0 ? revenue / spendBrl : 0;
   const profit = revenue - spendBrl;
   const cpa = sales > 0 ? spendBrl / sales : 0;
+
+  if (view === "entrega") {
+    return (
+      <>
+        <TableCell className="text-right tabular-nums">{brl(spendBrl)}</TableCell>
+        <TableCell className="text-right tabular-nums">{num(m.impressions)}</TableCell>
+        <TableCell className="text-right tabular-nums">{num(m.reach ?? 0)}</TableCell>
+        <TableCell className="text-right tabular-nums">{(m.frequency ?? 0).toFixed(2)}</TableCell>
+        <TableCell className="text-right tabular-nums">{num(m.clicks)}</TableCell>
+        <TableCell className="text-right tabular-nums">{(m.ctr ?? 0).toFixed(2)}%</TableCell>
+        <TableCell className="text-right tabular-nums">{brl(cpc)}</TableCell>
+        <TableCell className="text-right tabular-nums">{brl(cpm)}</TableCell>
+      </>
+    );
+  }
   return (
     <>
-      <TableCell className="text-right">{brl(spendBrl)}</TableCell>
-      <TableCell className="text-right">{num(m.impressions)}</TableCell>
-      <TableCell className="text-right">{num(m.reach ?? 0)}</TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">{brl(spendBrl)}</TableCell>
+      <TableCell className="text-right tabular-nums">{agg ? brl(revenue) : "—"}</TableCell>
+      <TableCell className="text-right tabular-nums text-muted-foreground">{agg ? num(sales) : "—"}</TableCell>
       <TableCell className="text-right">
-        {(m.frequency ?? 0).toFixed(2)}
+        {agg && spendBrl > 0 ? <RoasChip roas={roas} /> : "—"}
       </TableCell>
-      <TableCell className="text-right">{num(m.clicks)}</TableCell>
-      <TableCell className="text-right">
-        {(m.ctr ?? 0).toFixed(2)}%
-      </TableCell>
-      <TableCell className="text-right">{brl(cpc)}</TableCell>
-      <TableCell className="text-right">{brl(cpm)}</TableCell>
-      <TableCell className="text-right">{agg ? num(sales) : "—"}</TableCell>
-      <TableCell className="text-right">
-        {agg ? brl(revenue) : "—"}
-      </TableCell>
-      <TableCell className="text-right">
-        {agg && spendBrl > 0 ? `${roas.toFixed(2)}x` : "—"}
-      </TableCell>
-      <TableCell className="text-right">
+      <TableCell className="text-right tabular-nums text-muted-foreground">
         {agg && sales > 0 ? brl(cpa) : "—"}
       </TableCell>
       <TableCell
-        className={
-          "text-right " +
-          (agg
-            ? profit >= 0
-              ? "text-[var(--color-success)]"
-              : "text-destructive"
-            : "")
-        }
+        className="text-right font-semibold tabular-nums"
+        style={agg ? { color: profit >= 0 ? "var(--color-success)" : "var(--color-destructive)" } : undefined}
       >
         {agg ? brl(profit) : "—"}
       </TableCell>
@@ -206,10 +259,12 @@ function AdRow({
   ad,
   rate,
   attr,
+  view,
 }: {
   ad: FBAd;
   rate: number;
   attr: AttributedSales;
+  view: View;
 }) {
   const agg = attr.byAd.get(ad.id);
   return (
@@ -221,7 +276,7 @@ function AdRow({
       <TableCell>
         <StatusBadge s={ad.status} />
       </TableCell>
-      <MetricsCells m={ad.insights} rate={rate} agg={agg} />
+      <MetricsCells m={ad.insights} rate={rate} agg={agg} view={view} />
     </TableRow>
   );
 }
@@ -231,11 +286,13 @@ function AdSetRow({
   preset,
   rate,
   attr,
+  view,
 }: {
   adset: FBAdSet;
   preset: DatePreset;
   rate: number;
   attr: AttributedSales;
+  view: View;
 }) {
   const [open, setOpen] = useState(false);
   const range: DateRange = { type: "preset", preset };
@@ -264,11 +321,11 @@ function AdSetRow({
           <StatusBadge s={adset.status} />
         </TableCell>
         {/* conjunto não tem agregação direta (sales atribuídas vão pra ad ou campanha) */}
-        <MetricsCells m={adset.insights} rate={rate} />
+        <MetricsCells m={adset.insights} rate={rate} view={view} />
       </TableRow>
       {open && isLoading && (
         <TableRow>
-          <TableCell colSpan={16} className="text-center text-muted-foreground">
+          <TableCell colSpan={totalColsFor(view)} className="text-center text-muted-foreground">
             <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
             Carregando anúncios...
           </TableCell>
@@ -276,7 +333,7 @@ function AdSetRow({
       )}
       {open &&
         ads?.map((ad) => (
-          <AdRow key={ad.id} ad={ad} rate={rate} attr={attr} />
+          <AdRow key={ad.id} ad={ad} rate={rate} attr={attr} view={view} />
         ))}
     </>
   );
@@ -287,11 +344,13 @@ function CampaignRow({
   preset,
   rate,
   attr,
+  view,
 }: {
   campaign: FBCampaign;
   preset: DatePreset;
   rate: number;
   attr: AttributedSales;
+  view: View;
 }) {
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -335,7 +394,7 @@ function CampaignRow({
         <TableCell>
           <StatusBadge s={campaign.status} />
         </TableCell>
-        <MetricsCells m={campaign.insights} rate={rate} agg={agg} />
+        <MetricsCells m={campaign.insights} rate={rate} agg={agg} view={view} />
       </TableRow>
       <BudgetEditDialog
         open={editOpen}
@@ -345,7 +404,7 @@ function CampaignRow({
       />
       {open && isLoading && (
         <TableRow>
-          <TableCell colSpan={16} className="text-center text-muted-foreground">
+          <TableCell colSpan={totalColsFor(view)} className="text-center text-muted-foreground">
             <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
             Carregando conjuntos...
           </TableCell>
@@ -359,6 +418,7 @@ function CampaignRow({
             preset={preset}
             rate={rate}
             attr={attr}
+            view={view}
           />
         ))}
     </>
@@ -514,28 +574,31 @@ function SortBtn({
   );
 }
 
-function UnassignedRow({ agg }: { agg: SalesAgg }) {
+function UnassignedRow({ agg, view }: { agg: SalesAgg; view: View }) {
   if (agg.sales === 0 && agg.revenue === 0) return null;
   return (
     <TableRow className="bg-muted/20 border-t-2">
       <TableCell colSpan={3} className="font-medium italic text-muted-foreground">
-        Não atribuído / Orgânico
+        Não atribuído / orgânico
       </TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">{num(agg.sales)}</TableCell>
-      <TableCell className="text-right">{brl(agg.revenue)}</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right">—</TableCell>
-      <TableCell className="text-right text-[var(--color-success)]">
-        {brl(agg.revenue)}
-      </TableCell>
+      {view === "entrega" ? (
+        DELIVERY_COLS.map((c) => (
+          <TableCell key={c.label} className="text-right text-muted-foreground">
+            —
+          </TableCell>
+        ))
+      ) : (
+        <>
+          <TableCell className="text-right text-muted-foreground">—</TableCell>
+          <TableCell className="text-right tabular-nums">{brl(agg.revenue)}</TableCell>
+          <TableCell className="text-right tabular-nums text-muted-foreground">{num(agg.sales)}</TableCell>
+          <TableCell className="text-right text-muted-foreground">—</TableCell>
+          <TableCell className="text-right text-muted-foreground">—</TableCell>
+          <TableCell className="text-right font-semibold tabular-nums text-[var(--color-success)]">
+            {brl(agg.revenue)}
+          </TableCell>
+        </>
+      )}
     </TableRow>
   );
 }
@@ -547,6 +610,7 @@ function CampaignsPage() {
   const [status, setStatus] = useState("ALL");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [view, setView] = useState<View>("resultado");
   // padrão: maior lucro no topo (campanhas campeãs)
   const [sortKey, setSortKey] = useState<SortKey>("profit");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -641,22 +705,36 @@ function CampaignsPage() {
             Desempenho por campanha
           </h1>
           <p className="text-sm text-muted-foreground">
-            Cruzamento de gasto do Meta com vendas da Ticto. Clique nas colunas
-            pra ordenar; padrão: maior lucro no topo.
+            Gasto do Meta cruzado com vendas da Ticto. Clique nas colunas pra
+            ordenar; padrão: maior lucro no topo.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
-        >
-          {isFetching ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            "Atualizar"
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-sm">
+            {(["resultado", "entrega"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={
+                  "rounded-[7px] px-3 py-1 transition-colors " +
+                  (view === v
+                    ? "bg-accent font-medium text-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                {v === "resultado" ? "Resultado" : "Entrega"}
+              </button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : "Atualizar"}
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -727,122 +805,28 @@ function CampaignsPage() {
                   />
                 </TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="spend"
-                    label="Gasto"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="impressions"
-                    label="Impressões"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="reach"
-                    label="Alcance"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">Freq.</TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="clicks"
-                    label="Cliques"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="ctr"
-                    label="CTR"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="cpc"
-                    label="CPC"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="cpm"
-                    label="CPM"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="sales"
-                    label="Vendas"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="revenue"
-                    label="Faturamento"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="roas"
-                    label="ROAS"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="cpa"
-                    label="CPA"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
-                <TableHead className="text-right">
-                  <SortBtn
-                    k="profit"
-                    label="Lucro"
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onChange={onSortChange}
-                  />
-                </TableHead>
+                {colsFor(view).map((col) => (
+                  <TableHead key={col.label} className="text-right">
+                    {col.key ? (
+                      <SortBtn
+                        k={col.key}
+                        label={col.label}
+                        sortKey={sortKey}
+                        sortDir={sortDir}
+                        onChange={onSortChange}
+                      />
+                    ) : (
+                      col.label
+                    )}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading &&
                 Array.from({ length: 8 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={16} className="py-2">
+                    <TableCell colSpan={totalColsFor(view)} className="py-2">
                       <Skeleton className="h-6 w-full" />
                     </TableCell>
                   </TableRow>
@@ -850,7 +834,7 @@ function CampaignsPage() {
               {error && (
                 <TableRow>
                   <TableCell
-                    colSpan={16}
+                    colSpan={totalColsFor(view)}
                     className="text-center py-10 text-destructive"
                   >
                     <AlertCircle className="inline h-5 w-5 mr-2" />
@@ -861,7 +845,7 @@ function CampaignsPage() {
               {!isLoading && !error && visible.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={16}
+                    colSpan={totalColsFor(view)}
                     className="text-center py-10 text-muted-foreground"
                   >
                     Nenhuma campanha encontrada. Verifique a conexão em
@@ -876,11 +860,12 @@ function CampaignsPage() {
                   preset={preset}
                   rate={rate}
                   attr={attribution}
+                  view={view}
                 />
               ))}
               {/* mostra o bucket "Não atribuído" só na última página
                   pra não duplicar quando há paginação */}
-              {onLastPage && <UnassignedRow agg={attribution.unassigned} />}
+              {onLastPage && <UnassignedRow agg={attribution.unassigned} view={view} />}
             </TableBody>
           </Table>
         </CardContent>
