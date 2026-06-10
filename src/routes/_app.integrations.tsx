@@ -68,6 +68,7 @@ function FacebookCard() {
   const [status, setStatus] = useState<{
     configured: boolean;
     accountId: string | null;
+    accounts?: { id: string; name: string }[];
   } | null>(null);
 
   useEffect(() => {
@@ -77,6 +78,9 @@ function FacebookCard() {
   }, []);
 
   const connected = !!status?.configured;
+  const accounts =
+    status?.accounts ??
+    (status?.accountId ? [{ id: status.accountId, name: status.accountId }] : []);
 
   return (
     <Card>
@@ -100,9 +104,17 @@ function FacebookCard() {
       </CardHeader>
       <CardContent className="text-sm">
         {connected ? (
-          <div>
-            <span className="text-muted-foreground">Conta de anúncios:</span>{" "}
-            <span className="font-mono">{status?.accountId}</span>
+          <div className="space-y-1">
+            <div className="text-muted-foreground">
+              {accounts.length} {accounts.length === 1 ? "conta de anúncios" : "contas de anúncios"}:
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {accounts.map((a) => (
+                <span key={a.id} className="rounded-md bg-accent px-2 py-0.5 font-mono text-xs">
+                  {a.name}
+                </span>
+              ))}
+            </div>
           </div>
         ) : (
           <p className="text-muted-foreground">

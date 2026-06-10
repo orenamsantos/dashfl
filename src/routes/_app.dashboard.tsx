@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/table";
 import { CheckoutHealthSection } from "@/components/checkout-health-section";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AccountSelect } from "@/components/account-select";
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — AdsTracker" }] }),
@@ -361,6 +362,7 @@ function aggregate(rows: SaleRow[], range: DateRange) {
 function DashboardPage() {
   const [range, setRange] = useState<DateRange>({ type: "preset", preset: "last_7d" });
   const [revenueMode, setRevenueMode] = useState<"gross" | "net">("gross");
+  const [account, setAccount] = useState("all");
 
   // --- câmbio: manual (dólar do dia) tem prioridade sobre o ao vivo ---
   const fx = useQuery({ queryKey: ["fx-usd-brl"], queryFn: fetchUsdBrl, staleTime: 36e5 });
@@ -395,22 +397,27 @@ function DashboardPage() {
   const fbRk = rangeKey(fbRange);
 
   const summary = useQuery({
-    queryKey: ["fb-summary", fbRk],
-    queryFn: () => fetchAccountInsights(fbRange),
+    queryKey: ["fb-summary", fbRk, account],
+    queryFn: () => fetchAccountInsights(fbRange, account),
   });
   const prevSummary = useQuery({
-    queryKey: ["fb-summary-prev", prevFbRange ? rangeKey(prevFbRange) : "none"],
-    queryFn: () => (prevFbRange ? fetchAccountInsights(prevFbRange) : Promise.resolve(null)),
+    queryKey: ["fb-summary-prev", prevFbRange ? rangeKey(prevFbRange) : "none", account],
+    queryFn: () =>
+      prevFbRange ? fetchAccountInsights(prevFbRange, account) : Promise.resolve(null),
   });
   const ts = useQuery({
-    queryKey: ["fb-timeseries", fbRk],
-    queryFn: () => fetchAccountTimeseries(fbRange),
+    queryKey: ["fb-timeseries", fbRk, account],
+    queryFn: () => fetchAccountTimeseries(fbRange, account),
   });
   const campaigns = useQuery({
-    queryKey: ["fb-campaigns", fbRk],
-    queryFn: () => fetchCampaigns(fbRange),
+    queryKey: ["fb-campaigns", fbRk, account],
+    queryFn: () => fetchCampaigns(fbRange, account),
   });
-  const allAds = useQuery({ queryKey: ["fb-all-ads"], queryFn: fetchAllAds, staleTime: 6e5 });
+  const allAds = useQuery({
+    queryKey: ["fb-all-ads", account],
+    queryFn: () => fetchAllAds(account),
+    staleTime: 6e5,
+  });
 
   const salesAll = useQuery({
     queryKey: ["sales-all"],
@@ -428,10 +435,38 @@ function DashboardPage() {
   });
 
   const rows = salesAll.data ?? [];
-  const cur = useMemo(() => aggregate(rows, range), [rows, range]);
+
+  // Índice de atribuição venda→campanha, montado com as campanhas/anúncios da
+  // conta no escopo atual (quando o seletor está numa conta, campaigns/allAds
+  // já vêm só dela). Compartilhado entre o filtro por conta e o ROAS atribuído.
+  const index = useMemo(
+    () =>
+      buildIndex(
+        (campaigns.data ?? []).map((c) => ({ id: c.id, name: c.name })),
+        (allAds.data ?? []).map((a) => ({ id: a.id, campaign_id: a.campaign_id })),
+      ),
+    [campaigns.data, allAds.data],
+  );
+
+  // Com "Todas as contas", usa todas as vendas (visão agregada da operação).
+  // Com uma conta selecionada, mantém só as vendas atribuíveis a ela — senão o
+  // faturamento somaria vendas de outra conta sobre o gasto de uma só (ROAS
+  // inflado). Atribuível = a venda resolve uma campanha no índice da conta.
+  const scopedRows = useMemo(() => {
+    if (account === "all") return rows;
+    return rows.filter(
+      (s) =>
+        !!attributeSale(
+          { utm_term: s.utm_term, utm_campaign: s.utm_campaign, src: s.src },
+          index,
+        ).campaignId,
+    );
+  }, [rows, account, index]);
+
+  const cur = useMemo(() => aggregate(scopedRows, range), [scopedRows, range]);
   const prev = useMemo(
-    () => (prevRange ? aggregate(rows, prevRange) : null),
-    [rows, prevRange],
+    () => (prevRange ? aggregate(scopedRows, prevRange) : null),
+    [scopedRows, prevRange],
   );
 
   // --- números atuais ---
@@ -491,10 +526,6 @@ function DashboardPage() {
     const camps = campaigns.data ?? [];
     const empty = { list: [] as CampRow[], organic: 0, organicCount: 0 };
     if (camps.length === 0) return empty;
-    const index = buildIndex(
-      camps.map((c) => ({ id: c.id, name: c.name })),
-      (allAds.data ?? []).map((a) => ({ id: a.id, campaign_id: a.campaign_id })),
-    );
     const revByCampaign = new Map<string, { revenue: number; count: number }>();
     let organic = 0;
     let organicCount = 0;
@@ -529,7 +560,7 @@ function DashboardPage() {
       .filter((c) => c.spend > 0 || c.revenue > 0)
       .sort((a, b) => b.spend - a.spend);
     return { list, organic, organicCount };
-  }, [campaigns.data, allAds.data, cur.approved, rate]);
+  }, [campaigns.data, index, cur.approved, rate]);
 
   const loading = summary.isLoading || salesAll.isLoading;
 
@@ -554,6 +585,7 @@ function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <AccountSelect value={account} onChange={setAccount} />
           <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-sm">
             {(["gross", "net"] as const).map((m) => (
               <button

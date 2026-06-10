@@ -301,6 +301,7 @@ function FacebookTab() {
   const [status, setStatus] = useState<{
     configured: boolean;
     accountId: string | null;
+    accounts?: { id: string; name: string; timezone: string | null }[];
     timezone?: string | null;
   } | null>(null);
 
@@ -310,43 +311,54 @@ function FacebookTab() {
       .catch(() => setStatus({ configured: false, accountId: null }));
   }, []);
 
+  const accounts =
+    status?.accounts ??
+    (status?.accountId
+      ? [{ id: status.accountId, name: status.accountId, timezone: status.timezone ?? null }]
+      : []);
+
   return (
     <Card>
       <CardHeader><CardTitle>Facebook Ads</CardTitle></CardHeader>
       <CardContent className="space-y-3 max-w-xl text-sm">
         <p className="text-muted-foreground">
           Por segurança, o token do Facebook é configurado no servidor (variável
-          de ambiente FACEBOOK_TOKEN) e nunca é inserido ou exibido aqui. Para
-          trocar o token, atualize o secret no Cloudflare.
+          de ambiente FACEBOOK_TOKEN) e nunca é inserido ou exibido aqui. As
+          contas vêm de <code>FACEBOOK_AD_ACCOUNT_ID</code> (aceita várias,
+          separadas por vírgula). Para alterar, atualize o secret no Cloudflare.
         </p>
         {status?.configured ? (
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div>
               <span className="text-muted-foreground">Status:</span>{" "}
-              <span className="font-medium text-[var(--color-success)]">
-                Conectado
-              </span>{" "}
+              <span className="font-medium text-[var(--color-success)]">Conectado</span>{" "}
               <span className="text-muted-foreground">
-                — conta {status.accountId}
+                — {accounts.length} {accounts.length === 1 ? "conta" : "contas"}
               </span>
             </div>
-            {status.timezone && (
-              <div className="text-xs">
-                <span className="text-muted-foreground">
-                  Fuso da conta de anúncios:
-                </span>{" "}
-                <strong>{status.timezone}</strong>
-                {status.timezone !== "America/Sao_Paulo" && (
-                  <span className="text-destructive">
-                    {" "}
-                    — diferente de SP. O gasto fecha o dia nesse fuso; em
-                    períodos curtos (hoje/ontem) pode não bater 100% com as
-                    vendas. Considere alinhar o fuso da conta no Gerenciador de
-                    Negócios.
-                  </span>
-                )}
-              </div>
-            )}
+            <div className="space-y-1.5">
+              {accounts.map((a) => (
+                <div key={a.id} className="rounded-md border border-border p-2.5">
+                  <div className="font-medium">{a.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    <span className="font-mono">{a.id}</span>
+                    {a.timezone && (
+                      <>
+                        {" · fuso "}
+                        <strong className="text-foreground">{a.timezone}</strong>
+                        {a.timezone !== "America/Sao_Paulo" && (
+                          <span className="text-destructive">
+                            {" "}
+                            (≠ SP — o gasto fecha o dia nesse fuso; em hoje/ontem
+                            pode não bater com as vendas)
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <div>

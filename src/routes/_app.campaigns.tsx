@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { BudgetEditDialog } from "@/components/budget-edit-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AccountSelect } from "@/components/account-select";
 import { brl, num } from "@/lib/format";
 import {
   fetchCampaigns,
@@ -611,6 +612,7 @@ function CampaignsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [view, setView] = useState<View>("resultado");
+  const [account, setAccount] = useState("all");
   // padrão: maior lucro no topo (campanhas campeãs)
   const [sortKey, setSortKey] = useState<SortKey>("profit");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -627,13 +629,13 @@ function CampaignsPage() {
 
   const pageRange: DateRange = { type: "preset", preset };
   const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: ["fb-campaigns", preset],
-    queryFn: () => fetchCampaigns(pageRange),
+    queryKey: ["fb-campaigns", preset, account],
+    queryFn: () => fetchCampaigns(pageRange, account),
   });
 
   const allAds = useQuery({
-    queryKey: ["fb-all-ads"],
-    queryFn: fetchAllAds,
+    queryKey: ["fb-all-ads", account],
+    queryFn: () => fetchAllAds(account),
     staleTime: 1000 * 60 * 10,
   });
 
@@ -710,6 +712,7 @@ function CampaignsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <AccountSelect value={account} onChange={setAccount} />
           <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-sm">
             {(["resultado", "entrega"] as const).map((v) => (
               <button

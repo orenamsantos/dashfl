@@ -85,9 +85,16 @@ async function fb<T>(params: Record<string, string>): Promise<T> {
   return json as T;
 }
 
+export interface FBAccount {
+  id: string;
+  name: string;
+  timezone: string | null;
+}
+
 export async function fetchFBStatus(): Promise<{
   configured: boolean;
   accountId: string | null;
+  accounts?: FBAccount[];
   timezone?: string | null;
 }> {
   return fb({ resource: "status" });
@@ -95,22 +102,30 @@ export async function fetchFBStatus(): Promise<{
 
 const DEFAULT_RANGE: DateRange = { type: "preset", preset: "last_7d" };
 
+// `account` opcional: id de uma conta pra escopar, ou "all"/undefined p/ agregado.
+function accParam(account?: string): Record<string, string> {
+  return account && account !== "all" ? { account } : {};
+}
+
 export async function fetchAccountInsights(
   range: DateRange = DEFAULT_RANGE,
+  account?: string,
 ): Promise<AccountSummary> {
-  return fb({ resource: "account_insights", ...rangeParams(range) });
+  return fb({ resource: "account_insights", ...rangeParams(range), ...accParam(account) });
 }
 
 export async function fetchAccountTimeseries(
   range: DateRange = DEFAULT_RANGE,
+  account?: string,
 ): Promise<{ date: string; spend: number; impressions: number; clicks: number }[]> {
-  return fb({ resource: "timeseries", ...rangeParams(range) });
+  return fb({ resource: "timeseries", ...rangeParams(range), ...accParam(account) });
 }
 
 export async function fetchCampaigns(
   range: DateRange = DEFAULT_RANGE,
+  account?: string,
 ): Promise<FBCampaign[]> {
-  return fb({ resource: "campaigns", ...rangeParams(range) });
+  return fb({ resource: "campaigns", ...rangeParams(range), ...accParam(account) });
 }
 
 export async function fetchAdSets(
@@ -129,8 +144,8 @@ export async function fetchAds(
 
 // Lista enxuta de todos os anúncios da conta (id, campaign_id, adset_id).
 // Usada pra mapear utm_term=ad.id → campanha quando agregando vendas.
-export async function fetchAllAds(): Promise<FBAdLite[]> {
-  return fb({ resource: "all_ads" });
+export async function fetchAllAds(account?: string): Promise<FBAdLite[]> {
+  return fb({ resource: "all_ads", ...accParam(account) });
 }
 
 // Atualiza o orçamento de uma campanha CBO. O valor é em centavos da moeda

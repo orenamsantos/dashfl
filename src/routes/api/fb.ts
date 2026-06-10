@@ -9,12 +9,31 @@ const API = "https://graph.facebook.com/v24.0";
 const INSIGHTS_FIELDS =
   "spend,impressions,clicks,reach,frequency,cpm,cpc,ctr";
 
+function normAcc(a: string): string {
+  const t = a.trim();
+  return t.startsWith("act_") ? t : `act_${t}`;
+}
+
+// FACEBOOK_AD_ACCOUNT_ID aceita UMA conta ("123") ou VÁRIAS separadas por
+// vírgula ("123,456"). Com mais de uma, o dashboard agrega o gasto das duas
+// (ex.: C03 + C05 da VORTX BR, que disparam o mesmo pixel e webhook).
 function getCreds() {
   const token = process.env.FACEBOOK_TOKEN;
-  let accountId = process.env.FACEBOOK_AD_ACCOUNT_ID;
-  // Accept both "act_123" and bare "123".
-  if (accountId && !accountId.startsWith("act_")) accountId = `act_${accountId}`;
-  return { token, accountId };
+  const raw = process.env.FACEBOOK_AD_ACCOUNT_ID ?? "";
+  const accountIds = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map(normAcc);
+  return { token, accountIds };
+}
+
+// Resolve quais contas usar nesta chamada: se vier ?account=<id> e ele estiver
+// na lista configurada, escopa só nele; senão usa todas (visão agregada).
+function pickAccounts(all: string[], param: string | null): string[] {
+  if (!param || param === "all") return all;
+  const want = normAcc(param);
+  return all.includes(want) ? [want] : all;
 }
 
 function jsonResponse(data: unknown, status = 200) {
@@ -129,99 +148,137 @@ export const Route = createFileRoute("/api/fb")({
             ? `time_range({"since":"${since}","until":"${until}"})`
             : `date_preset(${preset})`;
         const id = url.searchParams.get("id") ?? "";
-        const { token, accountId } = getCreds();
+        const { token, accountIds } = getCreds();
+        const accounts = pickAccounts(accountIds, url.searchParams.get("account"));
 
         // Status never exposes the token — only whether it's configured.
-        // Também devolve o fuso da conta de anúncios (timezone_name): é ele que
-        // a Meta usa pra fechar o dia do gasto. Se for diferente de SP, "hoje"/
-        // "ontem" do gasto e das vendas não batem.
+        // Devolve TODAS as contas configuradas (id + nome + fuso) pro seletor.
+        // O fuso (timezone_name) é o que a Meta usa pra fechar o dia do gasto;
+        // se diferente de SP, "hoje"/"ontem" do gasto e das vendas não batem.
         if (resource === "status") {
-          let timezone: string | null = null;
-          if (token && accountId) {
-            try {
-              const j = await graph(`/${accountId}?fields=timezone_name`, token);
-              timezone = j?.timezone_name ?? null;
-            } catch {
-              timezone = null;
+          const accs: { id: string; name: string; timezone: string | null }[] = [];
+          if (token) {
+            for (const acc of accountIds) {
+              try {
+                const j = await graph(`/${acc}?fields=name,timezone_name`, token);
+                accs.push({
+                  id: acc,
+                  name: j?.name ?? acc,
+                  timezone: j?.timezone_name ?? null,
+                });
+              } catch {
+                accs.push({ id: acc, name: acc, timezone: null });
+              }
             }
           }
           return jsonResponse({
-            configured: Boolean(token && accountId),
-            accountId: accountId ?? null,
-            timezone,
+            configured: Boolean(token && accountIds.length),
+            accountId: accountIds[0] ?? null,
+            accounts: accs,
+            timezone: accs[0]?.timezone ?? null,
           });
         }
 
         // Not configured yet → graceful empty so the dashboard shows zeros.
-        if (!token || !accountId) {
+        if (!token || accounts.length === 0) {
           return jsonResponse(emptyFor(resource));
         }
 
         try {
           switch (resource) {
             case "account_insights": {
-              const j = await graph(
-                `/${accountId}/insights?fields=${INSIGHTS_FIELDS}&${range}`,
-                token,
-              );
-              const i = parseInsights(j.data);
+              // Soma o gasto/impressões/cliques de TODAS as contas do escopo;
+              // recalcula cpc/cpm/ctr a partir dos totais.
+              let spend = 0;
+              let impressions = 0;
+              let clicks = 0;
+              for (const acc of accounts) {
+                const j = await graph(
+                  `/${acc}/insights?fields=${INSIGHTS_FIELDS}&${range}`,
+                  token,
+                );
+                const i = parseInsights(j.data);
+                spend += i.spend;
+                impressions += i.impressions;
+                clicks += i.clicks;
+              }
               return jsonResponse({
-                spend: i.spend,
-                impressions: i.impressions,
-                clicks: i.clicks,
-                cpc: i.cpc,
-                cpm: i.cpm,
-                ctr: i.ctr,
+                spend,
+                impressions,
+                clicks,
+                cpc: clicks > 0 ? spend / clicks : 0,
+                cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
+                ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
               });
             }
             case "timeseries": {
-              const j = await graph(
-                `/${accountId}/insights?fields=spend,impressions,clicks&${range}&time_increment=1`,
-                token,
-              );
+              // Funde as séries diárias das contas por data (soma).
+              const byDate = new Map<
+                string,
+                { spend: number; impressions: number; clicks: number }
+              >();
+              for (const acc of accounts) {
+                const j = await graph(
+                  `/${acc}/insights?fields=spend,impressions,clicks&${range}&time_increment=1`,
+                  token,
+                );
+                for (const d of j.data ?? []) {
+                  const e =
+                    byDate.get(d.date_start) ?? { spend: 0, impressions: 0, clicks: 0 };
+                  e.spend += Number(d.spend ?? 0);
+                  e.impressions += Number(d.impressions ?? 0);
+                  e.clicks += Number(d.clicks ?? 0);
+                  byDate.set(d.date_start, e);
+                }
+              }
               return jsonResponse(
-                (j.data ?? []).map((d: any) => ({
-                  date: d.date_start,
-                  spend: Number(d.spend ?? 0),
-                  impressions: Number(d.impressions ?? 0),
-                  clicks: Number(d.clicks ?? 0),
-                })),
+                [...byDate.entries()]
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([date, v]) => ({ date, ...v })),
               );
             }
             case "campaigns": {
               const fields = `id,name,status,daily_budget,lifetime_budget,insights.${nestedRange}{${INSIGHTS_FIELDS}}`;
-              const j = await graph(
-                `/${accountId}/campaigns?fields=${fields}&limit=200`,
-                token,
-              );
-              return jsonResponse(
-                (j.data ?? []).map((c: any) => ({
-                  id: c.id,
-                  name: c.name,
-                  status: c.status,
-                  daily_budget: c.daily_budget != null ? Number(c.daily_budget) : null,
-                  lifetime_budget:
-                    c.lifetime_budget != null ? Number(c.lifetime_budget) : null,
-                  insights: parseInsights(c.insights?.data),
-                })),
-              );
+              const out: any[] = [];
+              for (const acc of accounts) {
+                const j = await graph(
+                  `/${acc}/campaigns?fields=${fields}&limit=200`,
+                  token,
+                );
+                for (const c of j.data ?? []) {
+                  out.push({
+                    id: c.id,
+                    name: c.name,
+                    status: c.status,
+                    daily_budget: c.daily_budget != null ? Number(c.daily_budget) : null,
+                    lifetime_budget:
+                      c.lifetime_budget != null ? Number(c.lifetime_budget) : null,
+                    insights: parseInsights(c.insights?.data),
+                  });
+                }
+              }
+              return jsonResponse(out);
             }
             case "all_ads": {
-              // Lista enxuta de TODOS os anúncios da conta (id + campaign_id)
+              // Lista enxuta de TODOS os anúncios das contas (id + campaign_id)
               // pra montar o índice ad.id → campaign_id e cruzar com vendas
               // que vêm com utm_term=ad.id. Sem insights pra ficar barato.
-              const data = await graphPaged(
-                `/${accountId}/ads?fields=id,campaign_id,adset_id&limit=500`,
-                token,
-                10,
-              );
-              return jsonResponse(
-                data.map((a: any) => ({
-                  id: a.id,
-                  campaign_id: a.campaign_id,
-                  adset_id: a.adset_id,
-                })),
-              );
+              const out: any[] = [];
+              for (const acc of accounts) {
+                const data = await graphPaged(
+                  `/${acc}/ads?fields=id,campaign_id,adset_id&limit=500`,
+                  token,
+                  10,
+                );
+                for (const a of data) {
+                  out.push({
+                    id: a.id,
+                    campaign_id: a.campaign_id,
+                    adset_id: a.adset_id,
+                  });
+                }
+              }
+              return jsonResponse(out);
             }
             case "adsets": {
               if (!id) return jsonResponse([]);
