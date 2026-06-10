@@ -30,6 +30,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { BudgetEditDialog } from "@/components/budget-edit-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { brl, num } from "@/lib/format";
 import {
   fetchCampaigns,
@@ -838,17 +839,14 @@ function CampaignsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && (
-                <TableRow>
-                  <TableCell
-                    colSpan={16}
-                    className="text-center py-10 text-muted-foreground"
-                  >
-                    <Loader2 className="inline h-5 w-5 animate-spin mr-2" />
-                    Carregando campanhas...
-                  </TableCell>
-                </TableRow>
-              )}
+              {isLoading &&
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell colSpan={16} className="py-2">
+                      <Skeleton className="h-6 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))}
               {error && (
                 <TableRow>
                   <TableCell

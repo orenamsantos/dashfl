@@ -59,6 +59,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CheckoutHealthSection } from "@/components/checkout-health-section";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — AdsTracker" }] }),
@@ -228,65 +229,108 @@ function DeltaPill({ delta, suffix = "%" }: { delta: number | null; suffix?: str
 }
 
 function Sparkline({ data, color }: { data: number[]; color: string }) {
-  if (!data || data.length < 2) return <div className="h-9" />;
+  if (!data || data.length < 2) return <div className="h-10" />;
   const min = Math.min(...data);
   const max = Math.max(...data);
   const span = max - min || 1;
-  const w = 280;
-  const h = 34;
-  const pts = data
-    .map((v, i) => {
-      const x = (i / (data.length - 1)) * w;
-      const y = h - ((v - min) / span) * (h - 4) - 2;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
+  const w = 240;
+  const h = 40;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - ((v - min) / span) * (h - 6) - 3;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const line = pts.join(" ");
+  const area = `0,${h} ${line} ${w},${h}`;
+  const id = `sp-${color.replace(/[^a-z0-9]/gi, "")}`;
   return (
-    <svg className="mt-3 block h-9 w-full" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-      <polyline fill="none" stroke={color} strokeWidth="2" points={pts} />
+    <svg className="mt-4 block h-10 w-full" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <polygon points={area} fill={`url(#${id})`} />
+      <polyline
+        fill="none"
+        stroke={color}
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        points={line}
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   );
 }
 
-function HeroCard({
-  label,
-  value,
-  tone,
+function Panel({
+  className = "",
   children,
 }: {
-  label: string;
-  value: string;
-  tone: "good" | "bad" | "neutral";
-  children?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
 }) {
-  const color =
-    tone === "good"
-      ? "var(--color-success)"
-      : tone === "bad"
-        ? "var(--color-destructive)"
-        : "var(--color-foreground)";
   return (
-    <div className="relative overflow-hidden rounded-2xl border bg-card p-5 shadow-[0_18px_40px_-28px_#000]">
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div
-        className="mt-2.5 text-[2.5rem] font-bold leading-none tracking-tight tabular-nums"
-        style={{ color }}
-      >
-        {value}
-      </div>
+    <div
+      className={
+        "rounded-xl border border-border bg-card shadow-[0_1px_0_0_oklch(1_0_0_/_4%)_inset,0_20px_40px_-32px_#000] " +
+        className
+      }
+    >
       {children}
     </div>
   );
 }
 
-function SecCard({ label, value, mini }: { label: string; value: string; mini?: string }) {
+function Stat({
+  label,
+  value,
+  mini,
+  tone,
+}: {
+  label: string;
+  value: string;
+  mini?: string;
+  tone?: "neg";
+}) {
   return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="p-4">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
-      <div className="mt-1.5 text-xl font-semibold tracking-tight tabular-nums">{value}</div>
-      {mini && <div className="mt-0.5 text-[11.5px] text-muted-foreground">{mini}</div>}
+      <div
+        className="mt-1.5 text-lg font-semibold tracking-tight tabular-nums"
+        style={tone === "neg" ? { color: "var(--color-destructive)" } : undefined}
+      >
+        {value}
+      </div>
+      {mini && <div className="mt-0.5 text-[11px] text-muted-foreground">{mini}</div>}
+    </div>
+  );
+}
+
+function ChartLegend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+      <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+      {label}
+    </span>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 lg:grid-cols-4">
+        <Skeleton className="h-[150px] lg:col-span-2" />
+        <Skeleton className="h-[150px]" />
+        <Skeleton className="h-[150px]" />
+      </div>
+      <Skeleton className="h-[88px]" />
+      <Skeleton className="h-[340px]" />
+      <Skeleton className="h-[260px]" />
     </div>
   );
 }
@@ -489,246 +533,315 @@ function DashboardPage() {
 
   const loading = summary.isLoading || salesAll.isLoading;
 
+  const roasOk = roas >= breakeven;
+  const gaugePct = Math.min(100, (roas / (breakeven * 1.8)) * 100);
+  const breakMarker = Math.min(100, (1 / 1.8) * 100);
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* header */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Visão geral</h1>
           <p className="text-sm text-muted-foreground">
-            Meta Ads + vendas Ticto.
-            <span className="ml-2">
-              USD→BRL <strong>{rate.toFixed(4)}</strong>{" "}
-              {eff.source === "manual"
-                ? "(manual)"
-                : eff.source === "fallback"
-                  ? "(fallback)"
-                  : "(ao vivo)"}
-            </span>
+            Meta Ads cruzado com vendas da Ticto · USD→BRL{" "}
+            <strong className="text-foreground">{rate.toFixed(4)}</strong>{" "}
+            {eff.source === "manual"
+              ? "(manual)"
+              : eff.source === "fallback"
+                ? "(fallback)"
+                : "(ao vivo)"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Tabs value={revenueMode} onValueChange={(v) => setRevenueMode(v as "gross" | "net")}>
-            <TabsList>
-              <TabsTrigger value="gross">Bruto</TabsTrigger>
-              <TabsTrigger value="net">Líquido</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="inline-flex rounded-lg border border-border bg-card p-0.5 text-sm">
+            {(["gross", "net"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setRevenueMode(m)}
+                className={
+                  "rounded-[7px] px-3 py-1 transition-colors " +
+                  (revenueMode === m
+                    ? "bg-accent font-medium text-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                {m === "gross" ? "Bruto" : "Líquido"}
+              </button>
+            ))}
+          </div>
           <DateRangePicker value={range} onChange={setRange} />
         </div>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          Carregando dados...
-        </div>
+        <DashboardSkeleton />
       ) : summary.error ? (
-        <Card>
-          <CardContent className="py-8 text-center text-destructive">
-            {(summary.error as Error).message}
-          </CardContent>
-        </Card>
+        <Panel className="p-8 text-center text-destructive">
+          {(summary.error as Error).message}
+        </Panel>
       ) : (
         <>
           {/* HERO */}
-          <div className="grid gap-4 md:grid-cols-3">
-            <HeroCard label="💰 Lucro líquido" value={brl(lucro)} tone={lucro >= 0 ? "good" : "bad"}>
-              <div className="mt-3 flex items-center gap-2 text-xs">
-                <DeltaPill delta={pctDelta(lucro, prevLucro)} />
-                <span className="text-muted-foreground">vs período anterior</span>
+          <div className="grid gap-4 lg:grid-cols-4">
+            {/* lucro — painel-feature */}
+            <Panel className="relative isolate overflow-hidden p-5 lg:col-span-2">
+              <div
+                className="pointer-events-none absolute inset-0 -z-10"
+                style={{
+                  background:
+                    "radial-gradient(120% 140% at 0% 0%, oklch(0.8 0.17 152 / 0.08), transparent 55%)",
+                }}
+              />
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-[13px] font-medium text-muted-foreground">
+                    Lucro líquido
+                  </div>
+                  <div
+                    className="mt-2 text-[2.75rem] font-bold leading-none tracking-tight tabular-nums"
+                    style={{ color: lucro >= 0 ? "var(--color-success)" : "var(--color-destructive)" }}
+                  >
+                    {brl(lucro)}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <DeltaPill delta={pctDelta(lucro, prevLucro)} />
+                  <span className="text-[11px] text-muted-foreground">vs período anterior</span>
+                </div>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                após taxa Ticto e {brl(spend)} de mídia · {num(salesCount)} vendas
               </div>
               <Sparkline data={sparkLucro} color="var(--color-success)" />
-            </HeroCard>
+            </Panel>
 
-            <HeroCard label="🎯 ROAS" value={`${roas.toFixed(2)}x`} tone={roasTone(roas, breakeven)}>
-              <div className="mt-3 flex items-center gap-2 text-xs">
-                <DeltaPill delta={pctDelta(roas, prevRoas)} />
-                <span className="text-muted-foreground">
-                  breakeven {breakeven.toFixed(2)}x
+            {/* ROAS com gauge de breakeven */}
+            <Panel className="p-5">
+              <div className="text-[13px] font-medium text-muted-foreground">ROAS</div>
+              <div className="mt-2 flex items-end gap-2">
+                <span className="text-[2rem] font-bold leading-none tracking-tight tabular-nums text-foreground">
+                  {roas.toFixed(2)}x
+                </span>
+                <span className="mb-0.5">
+                  <DeltaPill delta={pctDelta(roas, prevRoas)} />
                 </span>
               </div>
-              <div className="mt-3 text-[11.5px] text-muted-foreground">
-                {roas >= breakeven ? "acima do breakeven" : "abaixo do breakeven"}
-                <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full bg-[oklch(1_0_0_/_8%)]">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full"
-                    style={{
-                      width: `${Math.min(100, (roas / (breakeven * 1.8)) * 100)}%`,
-                      background:
-                        "linear-gradient(90deg, var(--color-destructive), oklch(0.80 0.15 85), var(--color-success))",
-                    }}
-                  />
-                  <div
-                    className="absolute -top-1 bottom-[-4px] w-0.5 bg-foreground/60"
-                    style={{ left: `${Math.min(100, (1 / 1.8) * 100)}%` }}
-                  />
-                </div>
+              <div className="mt-4 text-[11.5px]">
+                <span style={{ color: roasOk ? "var(--color-success)" : "var(--color-destructive)" }}>
+                  {roasOk ? "acima" : "abaixo"}
+                </span>
+                <span className="text-muted-foreground">
+                  {" "}do breakeven {breakeven.toFixed(2)}x
+                </span>
               </div>
-            </HeroCard>
+              <div className="relative mt-2 h-1.5 overflow-hidden rounded-full bg-[oklch(1_0_0_/_8%)]">
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full"
+                  style={{
+                    width: `${gaugePct}%`,
+                    background:
+                      "linear-gradient(90deg, var(--color-destructive), var(--color-warning), var(--color-success))",
+                  }}
+                />
+                <div
+                  className="absolute -top-1 bottom-[-4px] w-0.5 bg-foreground/70"
+                  style={{ left: `${breakMarker}%` }}
+                />
+              </div>
+            </Panel>
 
-            <HeroCard label="📈 ROI" value={`${roi >= 0 ? "+" : ""}${roi.toFixed(1)}%`} tone={roi >= 0 ? "good" : "bad"}>
-              <div className="mt-3 flex items-center gap-2 text-xs">
-                <DeltaPill delta={pctDelta(roi, prevRoi)} suffix=" pts" />
-                <span className="text-muted-foreground">vs período anterior</span>
+            {/* ROI */}
+            <Panel className="p-5">
+              <div className="text-[13px] font-medium text-muted-foreground">ROI</div>
+              <div className="mt-2 flex items-end gap-2">
+                <span className="text-[2rem] font-bold leading-none tracking-tight tabular-nums text-foreground">
+                  {roi >= 0 ? "+" : ""}
+                  {roi.toFixed(1)}%
+                </span>
+                <span className="mb-0.5">
+                  <DeltaPill delta={pctDelta(roi, prevRoi)} suffix=" pts" />
+                </span>
               </div>
               <Sparkline data={sparkRoi} color="var(--color-info)" />
-            </HeroCard>
+            </Panel>
           </div>
 
-          {/* SECUNDÁRIOS */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            <SecCard label="Gasto Ads" value={brl(spend)} mini={`$ ${num((summary.data?.spend ?? 0))} × ${rate.toFixed(2)}`} />
-            <SecCard label="Faturamento" value={brl(gross)} mini={`bruto · ${num(salesCount)} vendas`} />
-            <SecCard label="Líquido" value={brl(net)} mini="após taxas Ticto" />
-            <SecCard label="Reembolsos" value={`${brl(refunds)}`} mini={`${refundRate.toFixed(1)}% · ${cur.refundCount}`} />
-            <SecCard label="Ticket médio" value={brl(ticket)} />
-            <SecCard label="CPA" value={brl(cpa)} />
-          </div>
+          {/* SECUNDÁRIOS — faixa dividida */}
+          <Panel className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 sm:divide-y-0 xl:grid-cols-6">
+            <Stat label="Gasto Ads" value={brl(spend)} mini={`$ ${num(summary.data?.spend ?? 0)} × ${rate.toFixed(2)}`} />
+            <Stat label="Faturamento" value={brl(gross)} mini={`${num(salesCount)} vendas`} />
+            <Stat label="Líquido" value={brl(net)} mini="após taxas Ticto" />
+            <Stat label="Reembolsos" value={brl(refunds)} mini={`${refundRate.toFixed(1)}% · ${cur.refundCount}`} tone="neg" />
+            <Stat label="Ticket médio" value={brl(ticket)} />
+            <Stat label="CPA" value={brl(cpa)} />
+          </Panel>
 
           {/* CHART */}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Gasto x Faturamento</CardTitle>
-            </CardHeader>
-            <CardContent className="h-72">
+          <Panel className="p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-[15px] font-semibold tracking-tight">Gasto x Faturamento</h2>
+                <p className="text-xs text-muted-foreground">por dia, em BRL</p>
+              </div>
+              <div className="flex items-center gap-4 text-xs">
+                <ChartLegend color="var(--color-success)" label="Faturamento" />
+                <ChartLegend color="var(--color-info)" label="Gasto" />
+              </div>
+            </div>
+            <div className="h-72">
               {ts.isLoading ? (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Carregando...
-                </div>
+                <Skeleton className="h-full w-full" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={daily}>
+                  <AreaChart data={daily} margin={{ left: 4, right: 8, top: 4 }}>
                     <defs>
                       <linearGradient id="gFat" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--color-success)" stopOpacity={0.25} />
+                        <stop offset="0%" stopColor="var(--color-success)" stopOpacity={0.3} />
                         <stop offset="100%" stopColor="var(--color-success)" stopOpacity={0} />
                       </linearGradient>
+                      <linearGradient id="gGasto" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--color-info)" stopOpacity={0.2} />
+                        <stop offset="100%" stopColor="var(--color-info)" stopOpacity={0} />
+                      </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 6%)" />
-                    <XAxis dataKey="date" stroke="var(--color-muted-foreground)" fontSize={12} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 5%)" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      stroke="var(--color-muted-foreground)"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                    />
                     <YAxis
                       stroke="var(--color-muted-foreground)"
-                      fontSize={12}
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      width={56}
                       tickFormatter={(v) => brl(Number(v))}
-                      width={70}
                     />
                     <Tooltip
-                      formatter={(v: number, n) => [brl(Number(v)), n === "gasto" ? "Gasto" : "Faturamento"]}
+                      cursor={{ stroke: "oklch(1 0 0 / 12%)" }}
                       contentStyle={{
-                        background: "var(--color-card)",
+                        background: "var(--color-popover)",
                         border: "1px solid var(--color-border)",
                         borderRadius: 10,
+                        fontSize: 12,
+                        boxShadow: "0 20px 40px -20px #000",
                       }}
+                      formatter={(v: number, n) => [brl(Number(v)), n === "gasto" ? "Gasto" : "Faturamento"]}
                     />
-                    <Legend />
                     <Area
                       type="monotone"
                       dataKey="faturamento"
-                      name="Faturamento"
+                      name="faturamento"
                       stroke="var(--color-success)"
-                      strokeWidth={2.5}
+                      strokeWidth={2}
                       fill="url(#gFat)"
                     />
                     <Area
                       type="monotone"
                       dataKey="gasto"
-                      name="Gasto"
+                      name="gasto"
                       stroke="var(--color-info)"
-                      strokeWidth={2.5}
-                      fill="transparent"
+                      strokeWidth={2}
+                      fill="url(#gGasto)"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
 
           {/* CAMPANHAS */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">Campanhas por desempenho</CardTitle>
+          <Panel className="overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <h2 className="text-[15px] font-semibold tracking-tight">Campanhas por desempenho</h2>
               <span className="text-xs text-muted-foreground">ROAS atribuído</span>
-            </CardHeader>
-            <CardContent className="p-0">
-              {campaigns.isLoading ? (
-                <div className="py-6 text-center text-muted-foreground">
-                  <Loader2 className="mr-2 inline h-5 w-5 animate-spin" />
-                  Carregando...
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Campanha</TableHead>
-                      <TableHead className="text-right">Gasto</TableHead>
-                      <TableHead className="text-right">Faturamento</TableHead>
-                      <TableHead className="text-right">Vendas</TableHead>
-                      <TableHead className="text-right">ROAS</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {campRows.list.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">
-                          Nenhuma campanha com dados no período.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                    {campRows.list.map((c) => {
-                          const tone = roasTone(c.roas, breakeven);
-                          return (
-                            <TableRow key={c.id}>
-                              <TableCell className="font-medium">{c.name}</TableCell>
-                              <TableCell className="text-right tabular-nums">{brl(c.spend)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{brl(c.revenue)}</TableCell>
-                              <TableCell className="text-right tabular-nums">{num(c.count)}</TableCell>
-                              <TableCell className="text-right">
-                                <span
-                                  className="inline-block rounded-full px-2 py-0.5 text-[11.5px] font-semibold tabular-nums"
-                                  style={{
-                                    background:
-                                      tone === "good"
-                                        ? "oklch(0.74 0.16 165 / .15)"
-                                        : tone === "bad"
-                                          ? "oklch(0.66 0.22 18 / .15)"
-                                          : "oklch(0.80 0.15 85 / .15)",
-                                    color:
-                                      tone === "good"
-                                        ? "var(--color-success)"
-                                        : tone === "bad"
-                                          ? "var(--color-destructive)"
-                                          : "oklch(0.80 0.15 85)",
-                                  }}
-                                >
-                                  {c.roas > 0 ? `${c.roas.toFixed(2)}x` : "—"}
-                                </span>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        },
-                      )}
-                    {campRows.organic > 0 && (
-                      <TableRow>
-                        <TableCell className="font-medium text-muted-foreground">
-                          orgânico / direto
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">—</TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {brl(campRows.organic)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {num(campRows.organicCount)}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">—</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+            </div>
+            {campaigns.isLoading ? (
+              <div className="space-y-2 p-5">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-9 w-full" />
+                ))}
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted-foreground">
+                    <th className="px-5 py-2.5 text-left font-medium">Campanha</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Gasto</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Faturamento</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Vendas</th>
+                    <th className="px-3 py-2.5 text-right font-medium">ROAS</th>
+                    <th className="px-5 py-2.5 text-right font-medium">Lucro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {campRows.list.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">
+                        Nenhuma campanha com dados no período.
+                      </td>
+                    </tr>
+                  )}
+                  {campRows.list.map((c) => {
+                    const tone = roasTone(c.roas, breakeven);
+                    const profit = c.revenue - c.spend;
+                    return (
+                      <tr
+                        key={c.id}
+                        className="border-t border-border transition-colors hover:bg-accent/40"
+                      >
+                        <td className="max-w-[260px] truncate px-5 py-3 font-medium">{c.name}</td>
+                        <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">{brl(c.spend)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{brl(c.revenue)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">{num(c.count)}</td>
+                        <td className="px-3 py-3 text-right">
+                          <span
+                            className="inline-block rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums"
+                            style={{
+                              background:
+                                tone === "good"
+                                  ? "oklch(0.8 0.17 152 / 0.14)"
+                                  : tone === "bad"
+                                    ? "oklch(0.645 0.205 18 / 0.14)"
+                                    : "oklch(0.82 0.135 80 / 0.14)",
+                              color:
+                                tone === "good"
+                                  ? "var(--color-success)"
+                                  : tone === "bad"
+                                    ? "var(--color-destructive)"
+                                    : "var(--color-warning)",
+                            }}
+                          >
+                            {c.roas > 0 ? `${c.roas.toFixed(2)}x` : "—"}
+                          </span>
+                        </td>
+                        <td
+                          className="px-5 py-3 text-right font-semibold tabular-nums"
+                          style={{ color: profit >= 0 ? "var(--color-success)" : "var(--color-destructive)" }}
+                        >
+                          {brl(profit)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {campRows.organic > 0 && (
+                    <tr className="border-t border-border">
+                      <td className="px-5 py-3 italic text-muted-foreground">orgânico / direto</td>
+                      <td className="px-3 py-3 text-right text-muted-foreground">—</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{brl(campRows.organic)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">{num(campRows.organicCount)}</td>
+                      <td className="px-3 py-3 text-right text-muted-foreground">—</td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums text-[var(--color-success)]">{brl(campRows.organic)}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </Panel>
 
           <CheckoutHealthSection rows={cur.inPeriod} />
         </>

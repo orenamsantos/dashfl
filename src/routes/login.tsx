@@ -1,13 +1,12 @@
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Loader2, Lock } from "lucide-react";
+import { Loader2, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Login — AdsTracker" }] }),
+  head: () => ({ meta: [{ title: "Entrar — dashfl" }] }),
   component: LoginPage,
 });
 
@@ -66,25 +65,34 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-md bg-primary/20 grid place-items-center text-primary">
-              <Lock className="h-4 w-4" />
-            </div>
-            <CardTitle>Entrar no AdsTracker</CardTitle>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(60% 50% at 50% 0%, oklch(0.8 0.17 152 / 0.07), transparent 70%)",
+        }}
+      />
+      <div className="relative w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary/15 ring-1 ring-primary/25">
+            <TrendingUp className="h-6 w-6 text-primary" />
           </div>
-        </CardHeader>
-        <CardContent>
+          <h1 className="mt-4 text-xl font-semibold tracking-tight">dashfl</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Painel de ROI · Meta Ads + Ticto
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-[0_20px_50px_-30px_#000]">
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+              <Label htmlFor="password">Senha de acesso</Label>
               <Input
                 id="password"
                 type="password"
                 autoFocus
                 autoComplete="current-password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -105,15 +113,11 @@ function LoginPage() {
               className="w-full"
               disabled={submitting || !password}
             >
-              {submitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                "Entrar"
-              )}
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Entrar"}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

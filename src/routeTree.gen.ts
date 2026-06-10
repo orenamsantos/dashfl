@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as PreviewRouteImport } from './routes/preview'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
@@ -30,11 +29,6 @@ import { Route as ApiAuthLogoutRouteImport } from './routes/api/auth/logout'
 import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
 import { Route as ApiPublicWebhooksTictoRouteImport } from './routes/api/public/webhooks/ticto'
 
-const PreviewRoute = PreviewRouteImport.update({
-  id: '/preview',
-  path: '/preview',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -133,7 +127,6 @@ const ApiPublicWebhooksTictoRoute = ApiPublicWebhooksTictoRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/preview': typeof PreviewRoute
   '/campaigns': typeof AppCampaignsRoute
   '/dashboard': typeof AppDashboardRoute
   '/import': typeof AppImportRoute
@@ -154,7 +147,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/preview': typeof PreviewRoute
   '/campaigns': typeof AppCampaignsRoute
   '/dashboard': typeof AppDashboardRoute
   '/import': typeof AppImportRoute
@@ -177,7 +169,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
-  '/preview': typeof PreviewRoute
   '/_app/campaigns': typeof AppCampaignsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/import': typeof AppImportRoute
@@ -200,7 +191,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
-    | '/preview'
     | '/campaigns'
     | '/dashboard'
     | '/import'
@@ -221,7 +211,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
-    | '/preview'
     | '/campaigns'
     | '/dashboard'
     | '/import'
@@ -243,7 +232,6 @@ export interface FileRouteTypes {
     | '/'
     | '/_app'
     | '/login'
-    | '/preview'
     | '/_app/campaigns'
     | '/_app/dashboard'
     | '/_app/import'
@@ -266,7 +254,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
-  PreviewRoute: typeof PreviewRoute
   ApiBackfillDatesRoute: typeof ApiBackfillDatesRoute
   ApiBackfillGrossRoute: typeof ApiBackfillGrossRoute
   ApiBackfillNetRoute: typeof ApiBackfillNetRoute
@@ -281,13 +268,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/preview': {
-      id: '/preview'
-      path: '/preview'
-      fullPath: '/preview'
-      preLoaderRoute: typeof PreviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -448,7 +428,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
-  PreviewRoute: PreviewRoute,
   ApiBackfillDatesRoute: ApiBackfillDatesRoute,
   ApiBackfillGrossRoute: ApiBackfillGrossRoute,
   ApiBackfillNetRoute: ApiBackfillNetRoute,

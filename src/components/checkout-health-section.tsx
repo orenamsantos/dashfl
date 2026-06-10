@@ -40,7 +40,13 @@ export interface CheckoutSaleRow {
   created_at: string | null;
 }
 
-const PIE_COLORS = ["#74B9FF", "#00B894", "#FDCB6E", "#FD79A8", "#A29BFE"];
+// Pix verde (o desejável), cartão azul, boleto âmbar, outros violeta.
+const PIE_COLORS = [
+  "var(--color-success)",
+  "var(--color-info)",
+  "var(--color-warning)",
+  "var(--color-chart-5)",
+];
 
 function isPix(m: string | null | undefined): boolean {
   if (!m) return false;
@@ -258,9 +264,11 @@ export function CheckoutHealthSection({ rows }: { rows: CheckoutSaleRow[] }) {
                   </Pie>
                   <Tooltip
                     contentStyle={{
-                      background: "#1A1A2E",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: 8,
+                      background: "var(--color-popover)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 10,
+                      fontSize: 12,
+                      boxShadow: "0 20px 40px -20px #000",
                     }}
                   />
                   <Legend />

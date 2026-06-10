@@ -17,6 +17,7 @@ import {
   RefreshCw,
   X,
   LogOut,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -48,26 +49,30 @@ export function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen flex w-full bg-background text-foreground">
+    <div className="flex min-h-screen w-full bg-background text-foreground">
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 bg-sidebar border-r border-sidebar-border transform transition-transform md:translate-x-0 md:static",
+          "fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-sidebar-border bg-sidebar transition-transform md:static md:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="h-16 flex items-center justify-between px-5 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-primary/20 grid place-items-center text-primary font-bold">
-              A
+        <div className="flex h-16 items-center justify-between px-5">
+          <div className="flex items-center gap-2.5">
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 ring-1 ring-primary/25">
+              <TrendingUp className="h-4 w-4 text-primary" />
             </div>
-            <span className="font-semibold tracking-tight">AdsTracker</span>
+            <span className="text-[15px] font-semibold tracking-tight">dashfl</span>
           </div>
-          <button className="md:hidden text-sidebar-foreground" onClick={() => setOpen(false)}>
+          <button
+            className="text-sidebar-foreground/70 md:hidden"
+            onClick={() => setOpen(false)}
+            aria-label="Fechar menu"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
-        <nav className="p-3 space-y-1">
+        <nav className="flex-1 space-y-0.5 px-3 py-2">
           {nav.map((item) => {
             const Icon = item.icon;
             const active = pathname.startsWith(item.to);
@@ -77,18 +82,30 @@ export function AppLayout() {
                 to={item.to}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                   active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                 )}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className={cn("h-4 w-4", active && "text-primary")} />
                 {item.label}
               </Link>
             );
           })}
         </nav>
+        <div className="border-t border-sidebar-border p-3">
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+          >
+            <div className="grid h-7 w-7 place-items-center rounded-full bg-accent text-xs font-semibold text-foreground">
+              FL
+            </div>
+            <span className="truncate">Flavio</span>
+            <LogOut className="ml-auto h-4 w-4 opacity-60" />
+          </button>
+        </div>
       </aside>
 
       {open && (
@@ -98,15 +115,19 @@ export function AppLayout() {
         />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 border-b border-border flex items-center px-4 md:px-6 gap-3 bg-background/80 backdrop-blur sticky top-0 z-20">
-          <button className="md:hidden text-foreground" onClick={() => setOpen(true)}>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur md:px-6">
+          <button
+            className="text-foreground md:hidden"
+            onClick={() => setOpen(true)}
+            aria-label="Abrir menu"
+          >
             <Menu className="h-5 w-5" />
           </button>
           <div className="text-sm text-muted-foreground">
-            <span>AdsTracker</span>
-            <span className="mx-2 opacity-50">/</span>
-            <span className="text-foreground font-medium">{current.label}</span>
+            <span>dashfl</span>
+            <span className="mx-1.5 opacity-40">/</span>
+            <span className="font-medium text-foreground">{current.label}</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button
@@ -117,16 +138,6 @@ export function AppLayout() {
             >
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">Atualizar</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={logout}
-              className="gap-2"
-              title="Sair"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sair</span>
             </Button>
           </div>
         </header>

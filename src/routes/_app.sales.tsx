@@ -24,6 +24,7 @@ import { Loader2 } from "lucide-react";
 import { brl } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import { saleEventDate, ymdSp } from "@/lib/date-range";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_app/sales")({
   head: () => ({ meta: [{ title: "Vendas — AdsTracker" }] }),
@@ -250,17 +251,14 @@ function SalesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && (
-                <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center py-10 text-muted-foreground"
-                  >
-                    <Loader2 className="inline h-5 w-5 animate-spin mr-2" />
-                    Carregando...
-                  </TableCell>
-                </TableRow>
-              )}
+              {isLoading &&
+                Array.from({ length: 10 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell colSpan={8} className="py-2">
+                      <Skeleton className="h-6 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ))}
               {error && (
                 <TableRow>
                   <TableCell
