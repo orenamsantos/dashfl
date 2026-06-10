@@ -155,7 +155,14 @@ function GeneralTab() {
           </p>
         </div>
         <Button onClick={save}>Salvar</Button>
-        <div className="pt-4 border-t border-border space-y-4">
+        <div className="space-y-4 border-t border-border pt-5">
+          <div>
+            <div className="text-sm font-medium">Manutenção de dados</div>
+            <p className="text-xs text-muted-foreground">
+              Recalcula valores e datas das vendas a partir do payload salvo.
+              Seguro rodar várias vezes; não toca em vendas importadas por CSV.
+            </p>
+          </div>
           <ReprocessGrossButton />
           <ReprocessNetButton />
           <ReprocessDatesButton />
@@ -530,8 +537,8 @@ function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Configurações</h1>
-        <p className="text-sm text-muted-foreground">Preferências do app e integrações.</p>
+        <h1 className="text-xl font-semibold tracking-tight">Configurações</h1>
+        <p className="text-sm text-muted-foreground">Preferências do app, câmbio e manutenção de dados.</p>
       </div>
       <Tabs defaultValue="general">
         <TabsList>

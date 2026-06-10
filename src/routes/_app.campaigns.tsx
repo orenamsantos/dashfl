@@ -637,8 +637,8 @@ function CampaignsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Desempenho por Campanha
+          <h1 className="text-xl font-semibold tracking-tight">
+            Desempenho por campanha
           </h1>
           <p className="text-sm text-muted-foreground">
             Cruzamento de gasto do Meta com vendas da Ticto. Clique nas colunas

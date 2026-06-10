@@ -121,9 +121,9 @@ function IntegrationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Integrações</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Integrações</h1>
         <p className="text-sm text-muted-foreground">
-          Conecte o Facebook Ads e os checkouts.
+          Conecte o Facebook Ads e o checkout da Ticto.
         </p>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

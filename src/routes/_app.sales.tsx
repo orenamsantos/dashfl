@@ -156,9 +156,9 @@ function SalesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Vendas</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Vendas</h1>
         <p className="text-sm text-muted-foreground">
-          Vendas recebidas via webhooks dos checkouts.
+          Vendas da Ticto (webhook + importação de CSV).
         </p>
       </div>
 
@@ -315,6 +315,14 @@ function SalesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {!isLoading && !error && (
+        <div className="text-xs text-muted-foreground">
+          {filtered.length === (data?.length ?? 0)
+            ? `${filtered.length} vendas`
+            : `${filtered.length} de ${data?.length ?? 0} vendas`}
+        </div>
+      )}
     </div>
   );
 }

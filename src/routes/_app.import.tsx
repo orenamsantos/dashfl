@@ -1,13 +1,36 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Upload, CheckCircle2, AlertCircle } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  CheckCircle2,
+  AlertCircle,
+  FileSpreadsheet,
+} from "lucide-react";
 import { parseTictoCsv, consolidateByOrder, type ParsedSale } from "@/lib/ticto-csv";
 import { importSalesBatch } from "@/lib/sales-import.functions";
+
+function Panel({
+  className = "",
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={
+        "rounded-xl border border-border bg-card shadow-[0_1px_0_0_oklch(1_0_0_/_4%)_inset,0_20px_40px_-32px_#000] " +
+        className
+      }
+    >
+      {children}
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/_app/import")({
   head: () => ({ meta: [{ title: "Importar Vendas — AdsTracker" }] }),
@@ -102,108 +125,118 @@ function ImportPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="max-w-4xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Importar Vendas (Ticto)</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Importar vendas</h1>
         <p className="text-sm text-muted-foreground">
-          Faça upload do CSV exportado em <em>Minhas Vendas → Exportar dados</em>. Vendas já
-          existentes (mesmo ID de transação) são atualizadas, sem duplicar.
+          Faça upload do CSV exportado em <em>Minhas Vendas → Exportar dados</em> na Ticto.
+          Vendas existentes (mesmo ID de transação) são atualizadas, sem duplicar.
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">1. Selecionar arquivo</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
+      <Panel className="p-5">
+        <label
+          className={
+            "flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-[oklch(1_0_0_/_2%)] px-6 py-10 text-center transition-colors hover:border-primary/40 hover:bg-[oklch(1_0_0_/_3.5%)] " +
+            (busy ? "pointer-events-none opacity-60" : "")
+          }
+        >
+          <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary/12 ring-1 ring-primary/20">
+            <Upload className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <div className="text-sm font-medium">
+              {file ? file.name : "Arraste o CSV ou clique para selecionar"}
+            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              Formato Ticto · .csv
+            </div>
+          </div>
+          <input
             type="file"
             accept=".csv,text/csv"
             disabled={busy}
+            className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) void handlePreview(f);
             }}
           />
-          {parseInfo && (
-            <div className="text-sm text-muted-foreground space-y-1">
-              <div>
-                <strong className="text-foreground">{parseInfo.total}</strong> linhas válidas
-                detectadas · {parseInfo.headers.length} colunas
-                {parseInfo.parseErrors > 0 && (
-                  <span className="text-destructive ml-2">
-                    · {parseInfo.parseErrors} linha(s) sem ID
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-          {preview && preview.length > 0 && (
-            <div className="rounded-md border border-border overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/40">
-                  <tr>
-                    <th className="text-left p-2">ID</th>
-                    <th className="text-left p-2">Produto</th>
-                    <th className="text-right p-2">Valor</th>
-                    <th className="text-left p-2">Status</th>
-                    <th className="text-left p-2">Data</th>
-                    <th className="text-left p-2">utm_campaign</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.map((r) => (
-                    <tr key={r.id} className="border-t border-border">
-                      <td className="p-2 font-mono">{r.id}</td>
-                      <td className="p-2">{r.product ?? "—"}</td>
-                      <td className="p-2 text-right">
-                        {r.amount != null ? r.amount.toFixed(2) : "—"}
-                      </td>
-                      <td className="p-2">{r.status}</td>
-                      <td className="p-2">
-                        {r.order_date ? new Date(r.order_date).toLocaleString("pt-BR") : "—"}
-                      </td>
-                      <td className="p-2 text-muted-foreground">{r.utm_campaign ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </label>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">2. Importar</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        {parseInfo && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs">
+              <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
+              <strong>{parseInfo.total}</strong>
+              <span className="text-muted-foreground">linhas · {parseInfo.headers.length} colunas</span>
+            </span>
+            {parseInfo.parseErrors > 0 && (
+              <span className="rounded-md bg-destructive/12 px-2.5 py-1 text-xs text-destructive">
+                {parseInfo.parseErrors} sem ID
+              </span>
+            )}
+          </div>
+        )}
+
+        {preview && preview.length > 0 && (
+          <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-xs">
+              <thead className="bg-[oklch(1_0_0_/_2.5%)] text-muted-foreground">
+                <tr>
+                  <th className="p-2.5 text-left font-medium">ID</th>
+                  <th className="p-2.5 text-left font-medium">Produto</th>
+                  <th className="p-2.5 text-right font-medium">Valor</th>
+                  <th className="p-2.5 text-left font-medium">Status</th>
+                  <th className="p-2.5 text-left font-medium">Data</th>
+                  <th className="p-2.5 text-left font-medium">utm_campaign</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.map((r) => (
+                  <tr key={r.id} className="border-t border-border">
+                    <td className="p-2.5 font-mono">{r.id}</td>
+                    <td className="max-w-[160px] truncate p-2.5">{r.product ?? "—"}</td>
+                    <td className="p-2.5 text-right tabular-nums">
+                      {r.amount != null ? r.amount.toFixed(2) : "—"}
+                    </td>
+                    <td className="p-2.5">{r.status}</td>
+                    <td className="p-2.5 text-muted-foreground">
+                      {r.order_date ? new Date(r.order_date).toLocaleDateString("pt-BR") : "—"}
+                    </td>
+                    <td className="p-2.5 text-muted-foreground">{r.utm_campaign ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center gap-3 border-t border-border pt-5">
           <Button onClick={handleImport} disabled={!file || busy} className="gap-2">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             {busy ? "Importando..." : "Iniciar importação"}
           </Button>
           {busy && (
-            <div className="space-y-2">
+            <div className="flex-1 space-y-1.5">
               <Progress value={progress} />
               <div className="text-xs text-muted-foreground">{progress}%</div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Panel>
 
       {summary && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              {summary.failed === 0 ? (
-                <CheckCircle2 className="h-5 w-5 text-[var(--color-success)]" />
-              ) : (
-                <AlertCircle className="h-5 w-5 text-destructive" />
-              )}
-              Resultado
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <Panel className="p-5">
+          <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold tracking-tight">
+            {summary.failed === 0 ? (
+              <CheckCircle2 className="h-5 w-5 text-[var(--color-success)]" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-destructive" />
+            )}
+            Resultado da importação
+          </div>
+          <div className="space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
               <Stat label="Linhas lidas" value={summary.read} />
               <Stat label="Novas" value={summary.inserted} tone="success" />
@@ -253,8 +286,8 @@ function ImportPage() {
                 </p>
               </details>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Panel>
       )}
     </div>
   );
