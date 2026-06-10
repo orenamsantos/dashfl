@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -22,6 +23,7 @@ import {
 import { Loader2 } from "lucide-react";
 import { brl } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
+import { saleEventDate, ymdSp } from "@/lib/date-range";
 
 export const Route = createFileRoute("/_app/sales")({
   head: () => ({ meta: [{ title: "Vendas — AdsTracker" }] }),
@@ -31,6 +33,8 @@ export const Route = createFileRoute("/_app/sales")({
 interface SaleRow {
   id: string;
   created_at?: string;
+  order_date?: string | null;
+  approved_at?: string | null;
   date?: string;
   product?: string;
   product_name?: string;
@@ -67,35 +71,86 @@ function StatusBadge({ s }: { s?: string }) {
         Reembolsada
       </Badge>
     );
+  if (v === "recusada" || v === "refused")
+    return (
+      <Badge className="bg-destructive/10 text-destructive/90 border-0">
+        Recusada
+      </Badge>
+    );
+  if (v === "expirada" || v === "expired")
+    return <Badge variant="secondary">Expirada</Badge>;
+  if (v === "abandonada" || v === "abandoned_cart")
+    return <Badge variant="secondary">Abandonada</Badge>;
   return <Badge variant="secondary">{s ?? "—"}</Badge>;
 }
+
+// Rótulo amigável pro filtro de status (a partir do valor canônico do banco).
+const STATUS_ORDER = [
+  "Aprovada",
+  "Pendente",
+  "Reembolsada",
+  "Recusada",
+  "Expirada",
+  "Abandonada",
+];
 
 function SalesPage() {
   const [checkout, setCheckout] = useState("ALL");
   const [status, setStatus] = useState("ALL");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["sales"],
     queryFn: async () => {
       if (!supabase) return [];
+      // Ordena pela data REAL da venda (order_date), não por created_at — que é
+      // a hora em que a linha foi gravada (todas as importadas por CSV teriam a
+      // mesma data do import). nullsFirst:false joga datas ausentes pro fim.
       const { data, error } = await supabase
         .from("sales")
         .select("*")
-        .order("created_at", { ascending: false })
-        .limit(500);
+        .order("order_date", { ascending: false, nullsFirst: false })
+        .limit(2000);
       if (error) throw new Error(error.message);
       return (data ?? []) as SaleRow[];
     },
   });
+
+  // Opções de filtro derivadas dos dados reais (não chumbadas): só aparecem os
+  // checkouts/status que existem de fato no banco.
+  const checkoutOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of data ?? []) {
+      const co = s.checkout ?? s.source;
+      if (co) set.add(co);
+    }
+    return [...set].sort();
+  }, [data]);
+
+  const statusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of data ?? []) if (s.status) set.add(s.status);
+    return [...set].sort(
+      (a, b) => STATUS_ORDER.indexOf(a) - STATUS_ORDER.indexOf(b),
+    );
+  }, [data]);
 
   const filtered = useMemo(() => {
     return (data ?? []).filter((s) => {
       const co = s.checkout ?? s.source ?? "";
       if (checkout !== "ALL" && co !== checkout) return false;
       if (status !== "ALL" && (s.status ?? "") !== status) return false;
+      if (from || to) {
+        const d = saleEventDate(s);
+        if (!d) return false;
+        const ymd = ymdSp(d);
+        if (from && ymd < from) return false;
+        if (to && ymd > to) return false;
+      }
       return true;
     });
-  }, [data, checkout, status]);
+  }, [data, checkout, status, from, to]);
 
   return (
     <div className="space-y-6">
@@ -110,30 +165,72 @@ function SalesPage() {
         <CardHeader>
           <CardTitle className="text-base">Filtros</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Input type="date" />
-          <Select value={checkout} onValueChange={setCheckout}>
-            <SelectTrigger>
-              <SelectValue placeholder="Checkout" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos checkouts</SelectItem>
-              <SelectItem value="Hotmart">Hotmart</SelectItem>
-              <SelectItem value="Kiwify">Kiwify</SelectItem>
-              <SelectItem value="Kirvano">Kirvano</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger>
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Todos status</SelectItem>
-              <SelectItem value="Aprovada">Aprovada</SelectItem>
-              <SelectItem value="Pendente">Pendente</SelectItem>
-              <SelectItem value="Reembolsada">Reembolsada</SelectItem>
-            </SelectContent>
-          </Select>
+        <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">De</span>
+            <Input
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Até</span>
+            <Input
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Checkout</span>
+            <Select value={checkout} onValueChange={setCheckout}>
+              <SelectTrigger>
+                <SelectValue placeholder="Checkout" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos checkouts</SelectItem>
+                {checkoutOptions.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <span className="text-xs text-muted-foreground">Status</span>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos status</SelectItem>
+                {statusOptions.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => {
+                setFrom("");
+                setTo("");
+                setCheckout("ALL");
+                setStatus("ALL");
+              }}
+            >
+              Limpar
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -180,17 +277,19 @@ function SalesPage() {
                     colSpan={8}
                     className="text-center py-10 text-muted-foreground"
                   >
-                    Nenhuma venda ainda. Configure os webhooks dos checkouts em
-                    Integrações.
+                    {(data?.length ?? 0) > 0
+                      ? "Nenhuma venda com esses filtros. Ajuste o período ou o status."
+                      : "Nenhuma venda ainda. Importe um CSV da Ticto ou configure o webhook em Integrações."}
                   </TableCell>
                 </TableRow>
               )}
               {filtered.map((s) => {
-                const date = s.created_at ?? s.date;
+                // Data REAL da venda: approved_at → order_date → created_at.
+                const d = saleEventDate(s);
                 return (
                   <TableRow key={s.id}>
                     <TableCell>
-                      {date ? new Date(date).toLocaleDateString("pt-BR") : "—"}
+                      {d ? d.toLocaleDateString("pt-BR") : "—"}
                     </TableCell>
                     <TableCell className="font-medium">
                       {s.product ?? s.product_name ?? "—"}

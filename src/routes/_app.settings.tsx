@@ -230,9 +230,10 @@ function ReprocessNetButton() {
     <div className="space-y-2">
       <Label>Reprocessar líquido das vendas</Label>
       <p className="text-xs text-muted-foreground">
-        Recalcula <code>net_amount</code> a partir de <code>producer.amount</code>{" "}
-        do webhook salvo. Útil para corrigir vendas antigas afetadas pelo bug
-        de mapeamento da Ticto v2. É seguro rodar várias vezes.
+        Recalcula <code>net_amount</code> a partir de{" "}
+        <code>owner_commissions</code> do webhook salvo (comissão do produtor por
+        item: principal + bumps). Corrige combos que ficaram com líquido baixo.
+        Não toca em vendas importadas por CSV. É seguro rodar várias vezes.
       </p>
       <Button variant="outline" onClick={run} disabled={busy}>
         {busy ? (

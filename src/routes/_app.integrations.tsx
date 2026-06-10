@@ -40,29 +40,6 @@ function CopyField({ value }: { value: string }) {
   );
 }
 
-function WebhookCard({ name, slug }: { name: string; slug: string }) {
-  const origin =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "https://seu-dominio.com";
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>{name}</CardTitle>
-          <Badge variant="secondary">Inativo</Badge>
-        </div>
-        <CardDescription>
-          Configure este webhook no painel da {name}.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <CopyField value={`${origin}/webhook/${slug}`} />
-      </CardContent>
-    </Card>
-  );
-}
-
 function TictoCard() {
   const origin =
     typeof window !== "undefined"
@@ -152,8 +129,6 @@ function IntegrationsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <FacebookCard />
         <TictoCard />
-        <WebhookCard name="Hotmart" slug="hotmart" />
-        <WebhookCard name="Kiwify" slug="kiwify" />
       </div>
     </div>
   );
