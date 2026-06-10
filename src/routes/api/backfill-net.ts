@@ -40,6 +40,25 @@ function parseReais(v: unknown): number | null {
 
 function pickProducer(raw: any): number | null {
   if (!raw || typeof raw !== "object") return null;
+  // `owner_commissions[]` (centavos por item: principal + bumps) é o líquido
+  // autoritativo do produtor. producer.amount/cms cobre só o principal e perdia
+  // a comissão dos bumps em combos — usar o array conserta o líquido baixo.
+  const arr = raw?.owner_commissions;
+  if (Array.isArray(arr) && arr.length > 0) {
+    let total = 0;
+    let found = false;
+    for (const c of arr) {
+      const cents = c?.commission_amount;
+      if (cents != null && String(cents).trim() !== "") {
+        const v = centsToReais(cents);
+        if (v != null) {
+          total += v;
+          found = true;
+        }
+      }
+    }
+    if (found) return total;
+  }
   const cents = raw?.producer?.amount;
   const reaisStr = raw?.producer?.cms;
   const fromCents = centsToReais(cents);
@@ -54,12 +73,12 @@ export const Route = createFileRoute("/api/backfill-net")({
         if (!(await isAuthenticated(request))) return unauthorized();
         try {
           const admin = getAdmin();
-          // Pega aprovadas com net_amount nulo/zero e raw não vazio. Limite
-          // alto pra cobrir bases grandes — em produção, paginar se necessário.
+          // Varre TODAS as aprovadas com raw (não só net nulo/zero): o bug dos
+          // combos gravava um líquido baixo, mas != 0, então o filtro antigo não
+          // pegava. Recalcula do owner_commissions e corrige quando diverge.
           const { data, error } = await admin
             .from("sales")
             .select("id, status, net_amount, raw")
-            .or("net_amount.is.null,net_amount.eq.0")
             .not("raw", "is", null)
             .limit(10000);
           if (error) return json({ error: error.message }, 500);
@@ -76,12 +95,23 @@ export const Route = createFileRoute("/api/backfill-net")({
             raw: any;
           }>) {
             scanned += 1;
+            // CSV é autoritativo (líquido = "Comissão do Produtor" do export):
+            // não recalcula linha travada pra não sobrescrever o valor real.
+            if (row.raw?.__dashfl_source === "csv") {
+              skipped += 1;
+              continue;
+            }
             if (!isApprovedStatus(row.status)) {
               skipped += 1;
               continue;
             }
             const net = pickProducer(row.raw);
             if (net == null || net <= 0) {
+              skipped += 1;
+              continue;
+            }
+            // Só grava se mudou (tolerância de 1 centavo) — idempotente.
+            if (Math.abs(net - Number(row.net_amount ?? 0)) < 0.01) {
               skipped += 1;
               continue;
             }

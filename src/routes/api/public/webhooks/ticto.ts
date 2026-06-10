@@ -180,6 +180,42 @@ function sumBumpCommissions(payload: any): number {
   return total;
 }
 
+// Líquido AUTORITATIVO do produtor. A Ticto v2 manda a comissão de CADA item
+// (produto principal + bumps) num array de topo `owner_commissions[]`, com
+// `commission_amount` em CENTAVOS. `producer.amount`/`producer.cms` só trazem a
+// comissão do produto PRINCIPAL — usá-los sozinhos perdia a comissão dos bumps
+// (combo R$65 gravava líquido R$31,92 em vez de R$57,96). Quando o array existe,
+// somá-lo é o líquido completo. Retorna null se o payload não traz o array.
+function netFromOwnerCommissions(payload: any): number | null {
+  const arr = payload?.owner_commissions;
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  let total = 0;
+  let found = false;
+  for (const c of arr) {
+    const cents = c?.commission_amount;
+    if (cents != null && String(cents).trim() !== "") {
+      total += centsToReais(cents);
+      found = true;
+    }
+  }
+  return found ? total : null;
+}
+
+// Resolve o status final quando um postback chega pra uma venda já gravada.
+// Regras: reembolso/chargeback é terminal e SEMPRE vence (antes, um refund não
+// atualizava a linha e a venda seguia contando como aprovada); pagamento
+// confirmado vence pendências; e nunca rebaixa uma venda já Aprovada por causa
+// de um retry de "Pendente".
+function resolveSaleStatus(
+  existing: string | null | undefined,
+  incoming: string,
+): string {
+  if (incoming === "Reembolsada") return incoming;
+  if (incoming === "Aprovada") return incoming;
+  if (existing === "Aprovada") return existing;
+  return incoming;
+}
+
 // Identificador estável do "item" (produto+oferta) deste postback. Usado pra
 // detectar retry/mudança de status do MESMO item (mesma chave -> NÃO soma) vs
 // postback de um item adicional/bump (chave nova -> soma).
@@ -311,31 +347,42 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
         );
         const status = normalizeStatus(statusRaw);
 
-        // --- bruto: item.amount está em CENTAVOS; bumps[].offer_price em REAIS
+        // --- bruto: `order.paid_amount` (centavos) é o que o cliente DE FATO
+        // pagou — item principal + bumps + descontos já aplicados. É a fonte
+        // autoritativa. Fallback pro cálculo item.amount (centavos) + bumps
+        // (offer_price em reais) quando o payload não traz paid_amount.
+        const paidAmount = centsToReais(
+          pick(payload, "order.paid_amount", "transaction.paid_amount"),
+        );
         const itemAmount = centsToReais(
           pick(payload, "item.amount", "item.price", "transaction.amount"),
         );
         const bumpTotal = sumBumps(payload);
-        // Soma bumps quando vêm no mesmo pedido (config "Combo junto com a
-        // oferta principal"). Sem bumps, fica só o item.
-        const amount = itemAmount + bumpTotal;
+        const amount = paidAmount > 0 ? paidAmount : itemAmount + bumpTotal;
 
-        // --- líquido: producer.amount em CENTAVOS; producer.cms em REAIS (string).
-        // Só faz sentido quando o pagamento foi de fato confirmado (authorized).
-        // Em pix_created / waiting_payment NÃO há comissão ainda — fica null.
+        // --- líquido: `owner_commissions[]` traz a comissão do produtor por item
+        // (principal + bumps, em centavos) e é a fonte autoritativa. Só quando
+        // não vier, cai pro producer.amount/cms (que cobre só o principal) +
+        // sumBumpCommissions. Só faz sentido quando o pagamento foi de fato
+        // confirmado; em pix_created / waiting_payment NÃO há comissão — fica null.
         let net_amount: number | null = null;
         if (isApprovedStatus(status)) {
-          const producerCents = pick(payload, "producer.amount");
-          let main = 0;
-          if (producerCents != null && String(producerCents).trim() !== "") {
-            main = centsToReais(producerCents);
+          const fromOwners = netFromOwnerCommissions(payload);
+          if (fromOwners != null) {
+            net_amount = fromOwners;
           } else {
-            const cms = pick(payload, "producer.cms");
-            if (cms != null && String(cms).trim() !== "") {
-              main = parseReais(cms);
+            const producerCents = pick(payload, "producer.amount");
+            let main = 0;
+            if (producerCents != null && String(producerCents).trim() !== "") {
+              main = centsToReais(producerCents);
+            } else {
+              const cms = pick(payload, "producer.cms");
+              if (cms != null && String(cms).trim() !== "") {
+                main = parseReais(cms);
+              }
             }
+            net_amount = main + sumBumpCommissions(payload);
           }
-          net_amount = main + sumBumpCommissions(payload);
         }
 
         // --- tracking (utms / src / sck) — "Não Informado" vira null
@@ -528,10 +575,7 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
             const { error } = await admin
               .from("sales")
               .update({
-                status:
-                  row.status === "Aprovada"
-                    ? row.status
-                    : existing.status ?? row.status,
+                status: resolveSaleStatus(existing.status, row.status),
                 approved_at: row.approved_at ?? undefined,
                 payment_method: row.payment_method ?? undefined,
                 raw: nextRaw,
@@ -559,8 +603,7 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
             // reflete item + bumps consolidados.
             const nextRaw = { ...payload, __dashfl_merged_items: existingMerged };
             const update: Record<string, unknown> = {
-              status:
-                row.status === "Aprovada" ? row.status : existing.status ?? row.status,
+              status: resolveSaleStatus(existing.status, row.status),
               approved_at: row.approved_at ?? undefined,
               payment_method: row.payment_method ?? undefined,
               raw: nextRaw,
@@ -594,8 +637,7 @@ export const Route = createFileRoute("/api/public/webhooks/ticto")({
               row.net_amount != null
                 ? Number(existing.net_amount ?? 0) + row.net_amount
                 : existing.net_amount,
-            status:
-              row.status === "Aprovada" ? row.status : existing.status ?? row.status,
+            status: resolveSaleStatus(existing.status, row.status),
             approved_at: row.approved_at ?? undefined,
             payment_method: row.payment_method ?? undefined,
             raw: nextRaw,

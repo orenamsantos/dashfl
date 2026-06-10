@@ -396,12 +396,16 @@ function DashboardPage() {
   const gross = cur.gross;
   const net = cur.net;
   const refunds = cur.refunds;
-  const revenue = revenueMode === "net" ? net - refunds : gross;
-  const prevRevenue = prev ? (revenueMode === "net" ? prev.net - prev.refunds : prev.gross) : 0;
+  // Vendas reembolsadas já saem do `approved` (status "Reembolsada"), então NÃO
+  // entram em `net` nem em `gross`. Subtrair `refunds` de novo descontava o
+  // reembolso DUAS vezes no modo Líquido (o modo Bruto nunca subtraiu). Os dois
+  // modos agora tratam reembolso igual: já excluído. `refunds` segue como KPI.
+  const revenue = revenueMode === "net" ? net : gross;
+  const prevRevenue = prev ? (revenueMode === "net" ? prev.net : prev.gross) : 0;
   const salesCount = cur.count;
 
-  const lucro = net - refunds - spend; // dinheiro no bolso (líquido após taxa, reembolso e ads)
-  const prevLucro = prev ? prev.net - prev.refunds - prevSpend : 0;
+  const lucro = net - spend; // dinheiro no bolso (líquido após taxa Ticto e ads)
+  const prevLucro = prev ? prev.net - prevSpend : 0;
   const roas = spend > 0 ? revenue / spend : 0;
   const prevRoas = prevSpend > 0 ? prevRevenue / prevSpend : 0;
   const roi = spend > 0 ? ((revenue - spend) / spend) * 100 : 0;
