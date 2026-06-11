@@ -277,11 +277,13 @@ function ReprocessDatesButton() {
   }
   return (
     <div className="space-y-2">
-      <Label>Reprocessar datas das vendas</Label>
+      <Label>Reprocessar datas das vendas (corrige fuso)</Label>
       <p className="text-xs text-muted-foreground">
-        Preenche <code>order_date</code> e <code>approved_at</code> das vendas
-        que ficaram NULL. Usa o <code>raw</code> do webhook quando disponível;
-        caso contrário, cai pra <code>created_at</code> como aproximação.
+        Re-deriva <code>order_date</code> e <code>approved_at</code> do{" "}
+        <code>raw</code> do webhook com o fuso de Brasília corrigido — conserta
+        as vendas que estavam 3h adiantadas (a da madrugada caía no dia
+        anterior) e preenche as que ficaram NULL. Não toca nas linhas vindas do
+        CSV (já corretas).
       </p>
       <Button variant="outline" onClick={run} disabled={busy}>
         {busy ? (

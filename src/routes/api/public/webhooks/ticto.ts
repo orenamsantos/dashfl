@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeStatus, isApprovedStatus } from "@/lib/status";
+import { parseTictoDate } from "@/lib/ticto-date";
 
 // Ticto webhook receiver (Ticto v2 — https://webhook.ticto.dev/docs/v2).
 // Configure in Ticto: URL = https://<your-domain>/api/public/webhooks/ticto?token=<TICTO_WEBHOOK_TOKEN>
@@ -13,31 +14,6 @@ function getAdmin() {
     throw new Error("Supabase admin credentials missing on server");
   }
   return createClient(url, serviceKey, { auth: { persistSession: false } });
-}
-
-// Parser tolerante: aceita ISO (2024-05-31T...) ou BR ("31/05/2024 13:45:00").
-// Retorna ISO 8601 ou null. A coluna `order_date`/`approved_at` é timestamptz.
-function parseTictoDate(v: unknown): string | null {
-  const s = clean(v);
-  if (!s) return null;
-  // ISO direto
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
-  }
-  // BR: DD/MM/YYYY [HH:MM[:SS]]
-  const m = s.match(
-    /^(\d{2})\/(\d{2})\/(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/,
-  );
-  if (m) {
-    const [, dd, mm, yyyy, hh = "00", mi = "00", ss = "00"] = m;
-    const iso = `${yyyy}-${mm}-${dd}T${hh}:${mi}:${ss}-03:00`;
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString();
-  }
-  // último recurso
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 const CORS = {
