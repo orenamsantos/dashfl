@@ -43,6 +43,10 @@ interface SaleRow {
   approved_at: string | null;
   created_at: string | null;
   raw: unknown;
+  // Selecionamos a linha INTEIRA (select *) pra re-upsert: o upsert dispara o
+  // caminho de INSERT do "ON CONFLICT" e a tabela tem colunas NOT NULL (ex.
+  // `checkout`) — mandar a linha completa preenche todas e a gravação passa.
+  [key: string]: unknown;
 }
 
 // O PostgREST corta em ~1000 linhas/request; paginamos por `id` pra varrer tudo.
@@ -57,7 +61,7 @@ async function fetchAll(
     const from = page * PAGE;
     const { data, error } = await admin
       .from("sales")
-      .select("id, status, order_date, approved_at, created_at, raw")
+      .select("*")
       .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(error.message);
@@ -84,13 +88,14 @@ export const Route = createFileRoute("/api/backfill-dates")({
           let tzFixed = 0;
           const failures: { id: string; reason: string }[] = [];
 
-          // Acumula as correções e grava em LOTE no fim. O Cloudflare Worker tem
-          // um teto de ~50 subrequisições por invocação; fazer um UPDATE por
-          // linha (127 vendas) estourava o teto e só ~49 gravações passavam — o
-          // resto falhava silencioso e o banco não mudava. Um upsert por coluna
-          // resolve tudo em 2 subrequisições.
-          const orderPatches: { id: string; order_date: string }[] = [];
-          const approvedPatches: { id: string; approved_at: string }[] = [];
+          // Re-upsert da linha INTEIRA com as datas corrigidas, gravado em LOTE.
+          // Dois motivos pra linha inteira + lote:
+          //  - O Cloudflare Worker corta em ~50 subrequisições/invocação; um
+          //    UPDATE por linha (127 vendas) estourava e só ~49 passavam.
+          //  - O upsert dispara o INSERT do "ON CONFLICT"; a tabela tem colunas
+          //    NOT NULL (ex. `checkout`), então mandar só {id, data} era rejeitado.
+          //    A linha completa (lida do banco) já traz todas preenchidas.
+          const toUpsert: Record<string, unknown>[] = [];
 
           for (const row of rows) {
             scanned += 1;
@@ -101,6 +106,7 @@ export const Route = createFileRoute("/api/backfill-dates")({
               continue;
             }
 
+            const next: Record<string, unknown> = { ...row };
             let changed = false;
             let fixedExisting = false;
 
@@ -110,7 +116,7 @@ export const Route = createFileRoute("/api/backfill-dates")({
               row.created_at ??
               null;
             if (od && od !== row.order_date) {
-              orderPatches.push({ id: row.id, order_date: od });
+              next.order_date = od;
               changed = true;
               if (row.order_date) fixedExisting = true;
             }
@@ -122,37 +128,42 @@ export const Route = createFileRoute("/api/backfill-dates")({
                 row.created_at ??
                 null;
               if (ad && ad !== row.approved_at) {
-                approvedPatches.push({ id: row.id, approved_at: ad });
+                next.approved_at = ad;
                 changed = true;
                 if (row.approved_at) fixedExisting = true;
               }
             }
 
-            if (changed) updated += 1;
-            else unchanged += 1;
+            if (changed) {
+              updated += 1;
+              toUpsert.push(next);
+            } else {
+              unchanged += 1;
+            }
             if (fixedExisting) tzFixed += 1;
           }
 
-          // Grava em blocos (upsert por id só sobrescreve a coluna enviada).
+          // Grava em blocos (poucas subrequisições). Se algum bloco falhar por
+          // uma coluna que não pode ir no upsert, tenta de novo sem `raw`.
           const CHUNK = 500;
-          async function flush(
-            records: Record<string, string>[],
-          ): Promise<void> {
-            for (let i = 0; i < records.length; i += CHUNK) {
-              const slice = records.slice(i, i + CHUNK);
-              const { error } = await admin
+          for (let i = 0; i < toUpsert.length; i += CHUNK) {
+            const slice = toUpsert.slice(i, i + CHUNK);
+            let { error } = await admin
+              .from("sales")
+              .upsert(slice, { onConflict: "id" });
+            if (error) {
+              const stripped = slice.map(({ raw: _omit, ...rest }) => rest);
+              ({ error } = await admin
                 .from("sales")
-                .upsert(slice, { onConflict: "id" });
-              if (error) {
-                failures.push({
-                  id: `chunk@${i}(${slice.length})`,
-                  reason: error.message,
-                });
-              }
+                .upsert(stripped, { onConflict: "id" }));
+            }
+            if (error) {
+              failures.push({
+                id: `chunk@${i}(${slice.length})`,
+                reason: error.message,
+              });
             }
           }
-          await flush(orderPatches);
-          await flush(approvedPatches);
 
           return json({
             ok: true,
@@ -161,7 +172,7 @@ export const Route = createFileRoute("/api/backfill-dates")({
             tzFixed,
             unchanged,
             skippedCsv,
-            wrote: orderPatches.length + approvedPatches.length,
+            wrote: toUpsert.length,
             failures,
           });
         } catch (e) {
