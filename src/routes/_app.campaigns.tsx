@@ -52,7 +52,7 @@ import {
   buildIndex,
   type AttributionIndex,
 } from "@/lib/attribution";
-import { isApprovedStatus } from "@/lib/status";
+import { isApprovedStatus, REVENUE_STATUSES } from "@/lib/status";
 import { isSaleInRange } from "@/lib/date-range";
 
 export const Route = createFileRoute("/_app/campaigns")({
@@ -652,10 +652,12 @@ function CampaignsPage() {
   const sales = useQuery({
     queryKey: ["sales-all", preset],
     queryFn: async (): Promise<SaleRow[]> => {
-      // Paginado: o Supabase corta em 1000 linhas/request; o .limit(10000)
-      // antigo truncava silencioso quando a tabela cresceu (ver sales-fetch.ts).
+      // Só Aprovada/Reembolsada (filtro NO SERVIDOR): únicos status que entram
+      // no ROAS/faturamento. Corta o lixo de webhook antes de baixar, evitando o
+      // teto de 1000 linhas do PostgREST (ver sales-fetch.ts). Pagina como defesa.
       const rows = await fetchAllSales<SaleRow>(
         "id,amount,net_amount,status,utm_term,utm_campaign,src,approved_at,order_date,created_at",
+        { statusIn: REVENUE_STATUSES },
       );
       return rows.filter((r) => isSaleInRange(r, pageRange));
     },

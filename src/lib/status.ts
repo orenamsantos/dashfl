@@ -54,6 +54,13 @@ export function normalizeStatus(s: unknown): string {
 const APPROVED = new Set(["aprovada"]);
 const REFUND = new Set(["reembolsada"]);
 
+// Os ÚNICOS status que entram nos KPIs de faturamento/lucro (valor canônico
+// gravado na coluna `status`). As leituras de KPI (dashboard/campanhas) filtram
+// por estes no SERVIDOR — assim não baixam o lixo de webhook (Abandonada/
+// Expirada/Recusada/Pendente) que só incha a tabela rumo ao teto de 1000 linhas
+// do PostgREST e fazia o faturamento "bugar" (subconjunto instável) ao cruzá-lo.
+export const REVENUE_STATUSES = ["Aprovada", "Reembolsada"] as const;
+
 // Apenas status explicitamente aprovado conta como faturamento.
 // Status vazio/desconhecido NÃO conta (corrige bug do dashboard).
 export function isApprovedStatus(s: string | null | undefined): boolean {

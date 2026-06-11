@@ -49,7 +49,7 @@ import {
 import { fetchUsdBrl, effectiveRate, type FxMode } from "@/lib/currency";
 import { getSetting } from "@/lib/supabase";
 import { fetchAllSales } from "@/lib/sales-fetch";
-import { isApprovedStatus, isRefundStatus } from "@/lib/status";
+import { isApprovedStatus, isRefundStatus, REVENUE_STATUSES } from "@/lib/status";
 import { buildIndex, attributeSale } from "@/lib/attribution";
 import {
   Table,
@@ -423,11 +423,14 @@ function DashboardPage() {
   const salesAll = useQuery({
     queryKey: ["sales-all"],
     queryFn: () =>
-      // Paginado: o Supabase corta em 1000 linhas/request e o .limit(10000)
-      // antigo truncava silenciosamente quando a tabela passou de 1000 vendas
-      // (faturamento bugava na virada do dia). fetchAllSales pagina até o fim.
+      // Só Aprovada/Reembolsada (filtro NO SERVIDOR): são os únicos status que
+      // entram em faturamento/lucro. Corta o lixo de webhook (abandono/expirado/
+      // recusado) antes de baixar, mantendo o conjunto pequeno e estável — era o
+      // acúmulo desse lixo que cruzava as 1000 linhas e fazia o faturamento
+      // "bugar" (subconjunto instável). fetchAllSales ainda pagina como defesa.
       fetchAllSales<SaleRow>(
         "amount,net_amount,status,approved_at,order_date,created_at,product,product_name,payment_method,utm_term,utm_campaign,src",
+        { statusIn: REVENUE_STATUSES },
       ),
   });
 

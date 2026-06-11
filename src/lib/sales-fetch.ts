@@ -11,16 +11,30 @@ const PAGE = 1000;
 // Teto de segurança (50k linhas) contra loop infinito se algo mudar no backend.
 const MAX_PAGES = 50;
 
-export async function fetchAllSales<T>(columns: string): Promise<T[]> {
+export interface FetchSalesOpts {
+  // Filtra por status NO SERVIDOR (ex.: só "Aprovada"/"Reembolsada"). Crucial
+  // pros KPIs: corta o lixo de webhook (abandono/expirado/recusado) antes de
+  // descer pro cliente, mantendo o conjunto pequeno e estável — longe do teto
+  // de 1000 linhas que causava o faturamento instável.
+  statusIn?: readonly string[];
+}
+
+export async function fetchAllSales<T>(
+  columns: string,
+  opts: FetchSalesOpts = {},
+): Promise<T[]> {
   if (!supabase) return [];
   const all: T[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
     const from = page * PAGE;
-    const { data, error } = await supabase
+    let query = supabase
       .from("sales")
       .select(columns)
-      .order("id", { ascending: true })
-      .range(from, from + PAGE - 1);
+      .order("id", { ascending: true });
+    if (opts.statusIn && opts.statusIn.length > 0) {
+      query = query.in("status", opts.statusIn as string[]);
+    }
+    const { data, error } = await query.range(from, from + PAGE - 1);
     if (error) throw new Error(error.message);
     const rows = (data ?? []) as T[];
     all.push(...rows);
