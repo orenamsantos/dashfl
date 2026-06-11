@@ -266,11 +266,16 @@ function ReprocessDatesButton() {
       if (!res.ok || json?.error) {
         throw new Error(json?.error ?? `HTTP ${res.status}`);
       }
-      toast.success(
-        `Datas: ${json.updated} atualizadas (${json.tzFixed ?? "?"} fuso corrigido), ` +
-          `${json.skippedCsv ?? "?"} do CSV puladas, ${json.unchanged} sem alteração ` +
-          `(${json.scanned} analisadas)`,
-      );
+      const fails = Array.isArray(json.failures) ? json.failures : [];
+      const base =
+        `Datas: ${json.updated} corrigidas (${json.tzFixed ?? "?"} de fuso), ` +
+        `${json.wrote ?? "?"} gravações, ${json.skippedCsv ?? "?"} do CSV puladas ` +
+        `(${json.scanned} analisadas)`;
+      if (fails.length > 0) {
+        toast.error(`${base} — FALHA: ${fails[0]?.reason ?? "erro"}`);
+      } else {
+        toast.success(base);
+      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {

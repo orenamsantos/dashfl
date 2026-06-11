@@ -84,6 +84,14 @@ export const Route = createFileRoute("/api/backfill-dates")({
           let tzFixed = 0;
           const failures: { id: string; reason: string }[] = [];
 
+          // Acumula as correções e grava em LOTE no fim. O Cloudflare Worker tem
+          // um teto de ~50 subrequisições por invocação; fazer um UPDATE por
+          // linha (127 vendas) estourava o teto e só ~49 gravações passavam — o
+          // resto falhava silencioso e o banco não mudava. Um upsert por coluna
+          // resolve tudo em 2 subrequisições.
+          const orderPatches: { id: string; order_date: string }[] = [];
+          const approvedPatches: { id: string; approved_at: string }[] = [];
+
           for (const row of rows) {
             scanned += 1;
 
@@ -93,14 +101,19 @@ export const Route = createFileRoute("/api/backfill-dates")({
               continue;
             }
 
-            const patch: { order_date?: string; approved_at?: string } = {};
+            let changed = false;
+            let fixedExisting = false;
 
             const od =
               parseTictoDate(pickRaw(row.raw, ORDER_DATE_PATHS)) ??
               row.order_date ??
               row.created_at ??
               null;
-            if (od && od !== row.order_date) patch.order_date = od;
+            if (od && od !== row.order_date) {
+              orderPatches.push({ id: row.id, order_date: od });
+              changed = true;
+              if (row.order_date) fixedExisting = true;
+            }
 
             if (isApprovedStatus(row.status)) {
               const ad =
@@ -108,27 +121,38 @@ export const Route = createFileRoute("/api/backfill-dates")({
                 row.approved_at ??
                 row.created_at ??
                 null;
-              if (ad && ad !== row.approved_at) patch.approved_at = ad;
+              if (ad && ad !== row.approved_at) {
+                approvedPatches.push({ id: row.id, approved_at: ad });
+                changed = true;
+                if (row.approved_at) fixedExisting = true;
+              }
             }
 
-            if (Object.keys(patch).length === 0) {
-              unchanged += 1;
-              continue;
-            }
-            // Conta como correção de fuso quando a data já existia e mudou.
-            if (
-              (patch.order_date && row.order_date) ||
-              (patch.approved_at && row.approved_at)
-            ) {
-              tzFixed += 1;
-            }
-            const { error: upErr } = await admin
-              .from("sales")
-              .update(patch)
-              .eq("id", row.id);
-            if (upErr) failures.push({ id: row.id, reason: upErr.message });
-            else updated += 1;
+            if (changed) updated += 1;
+            else unchanged += 1;
+            if (fixedExisting) tzFixed += 1;
           }
+
+          // Grava em blocos (upsert por id só sobrescreve a coluna enviada).
+          const CHUNK = 500;
+          async function flush(
+            records: Record<string, string>[],
+          ): Promise<void> {
+            for (let i = 0; i < records.length; i += CHUNK) {
+              const slice = records.slice(i, i + CHUNK);
+              const { error } = await admin
+                .from("sales")
+                .upsert(slice, { onConflict: "id" });
+              if (error) {
+                failures.push({
+                  id: `chunk@${i}(${slice.length})`,
+                  reason: error.message,
+                });
+              }
+            }
+          }
+          await flush(orderPatches);
+          await flush(approvedPatches);
 
           return json({
             ok: true,
@@ -137,6 +161,7 @@ export const Route = createFileRoute("/api/backfill-dates")({
             tzFixed,
             unchanged,
             skippedCsv,
+            wrote: orderPatches.length + approvedPatches.length,
             failures,
           });
         } catch (e) {
