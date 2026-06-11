@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/table";
 import { Loader2 } from "lucide-react";
 import { brl } from "@/lib/format";
-import { supabase } from "@/lib/supabase";
+import { fetchAllSales } from "@/lib/sales-fetch";
 import { saleEventDate, ymdSp } from "@/lib/date-range";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -104,17 +104,19 @@ function SalesPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["sales"],
     queryFn: async () => {
-      if (!supabase) return [];
-      // Ordena pela data REAL da venda (order_date), não por created_at — que é
-      // a hora em que a linha foi gravada (todas as importadas por CSV teriam a
-      // mesma data do import). nullsFirst:false joga datas ausentes pro fim.
-      const { data, error } = await supabase
-        .from("sales")
-        .select("*")
-        .order("order_date", { ascending: false, nullsFirst: false })
-        .limit(2000);
-      if (error) throw new Error(error.message);
-      return (data ?? []) as SaleRow[];
+      // Paginado (teto de 1000 linhas/request do Supabase — ver sales-fetch.ts);
+      // depois ordena pela data REAL da venda (order_date), não por created_at —
+      // que é a hora em que a linha foi gravada (todas as importadas por CSV
+      // teriam a mesma data do import). Datas ausentes vão pro fim.
+      const rows = await fetchAllSales<SaleRow>("*");
+      return rows.sort((a, b) => {
+        const da = a.order_date ?? "";
+        const db = b.order_date ?? "";
+        if (!da && !db) return 0;
+        if (!da) return 1;
+        if (!db) return -1;
+        return db.localeCompare(da);
+      });
     },
   });
 

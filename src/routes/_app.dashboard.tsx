@@ -47,7 +47,8 @@ import {
   saleEventDate,
 } from "@/lib/date-range";
 import { fetchUsdBrl, effectiveRate, type FxMode } from "@/lib/currency";
-import { supabase, getSetting } from "@/lib/supabase";
+import { getSetting } from "@/lib/supabase";
+import { fetchAllSales } from "@/lib/sales-fetch";
 import { isApprovedStatus, isRefundStatus } from "@/lib/status";
 import { buildIndex, attributeSale } from "@/lib/attribution";
 import {
@@ -421,17 +422,13 @@ function DashboardPage() {
 
   const salesAll = useQuery({
     queryKey: ["sales-all"],
-    queryFn: async (): Promise<SaleRow[]> => {
-      if (!supabase) return [];
-      const { data, error } = await supabase
-        .from("sales")
-        .select(
-          "amount,net_amount,status,approved_at,order_date,created_at,product,product_name,payment_method,utm_term,utm_campaign,src",
-        )
-        .limit(10000);
-      if (error) return [];
-      return (data ?? []) as SaleRow[];
-    },
+    queryFn: () =>
+      // Paginado: o Supabase corta em 1000 linhas/request e o .limit(10000)
+      // antigo truncava silenciosamente quando a tabela passou de 1000 vendas
+      // (faturamento bugava na virada do dia). fetchAllSales pagina até o fim.
+      fetchAllSales<SaleRow>(
+        "amount,net_amount,status,approved_at,order_date,created_at,product,product_name,payment_method,utm_term,utm_campaign,src",
+      ),
   });
 
   const rows = salesAll.data ?? [];

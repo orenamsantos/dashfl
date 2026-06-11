@@ -46,7 +46,7 @@ import {
   type FBInsight,
 } from "@/lib/facebook-api";
 import { fetchUsdBrl } from "@/lib/currency";
-import { supabase } from "@/lib/supabase";
+import { fetchAllSales } from "@/lib/sales-fetch";
 import {
   attributeSale,
   buildIndex,
@@ -652,17 +652,12 @@ function CampaignsPage() {
   const sales = useQuery({
     queryKey: ["sales-all", preset],
     queryFn: async (): Promise<SaleRow[]> => {
-      if (!supabase) return [];
-      const { data: rows, error: e } = await supabase
-        .from("sales")
-        .select(
-          "id,amount,net_amount,status,utm_term,utm_campaign,src,approved_at,order_date,created_at",
-        )
-        .limit(10000);
-      if (e) return [];
-      return ((rows ?? []) as SaleRow[]).filter((r) =>
-        isSaleInRange(r, pageRange),
+      // Paginado: o Supabase corta em 1000 linhas/request; o .limit(10000)
+      // antigo truncava silencioso quando a tabela cresceu (ver sales-fetch.ts).
+      const rows = await fetchAllSales<SaleRow>(
+        "id,amount,net_amount,status,utm_term,utm_campaign,src,approved_at,order_date,created_at",
       );
+      return rows.filter((r) => isSaleInRange(r, pageRange));
     },
   });
 
