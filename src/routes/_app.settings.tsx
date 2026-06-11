@@ -267,7 +267,9 @@ function ReprocessDatesButton() {
         throw new Error(json?.error ?? `HTTP ${res.status}`);
       }
       toast.success(
-        `Datas: ${json.updated} preenchidas, ${json.unchanged} sem alteração (${json.scanned} analisadas)`,
+        `Datas: ${json.updated} atualizadas (${json.tzFixed ?? "?"} fuso corrigido), ` +
+          `${json.skippedCsv ?? "?"} do CSV puladas, ${json.unchanged} sem alteração ` +
+          `(${json.scanned} analisadas)`,
       );
     } catch (e) {
       toast.error((e as Error).message);
